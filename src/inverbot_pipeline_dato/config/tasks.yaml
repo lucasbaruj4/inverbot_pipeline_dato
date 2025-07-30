@@ -1,0 +1,34 @@
+extract_task:
+  description: >
+    Extract raw data from the provided sources: {sources_list}. Handle types: JSON, TEXT, PDF, EXCEL, PNG. Save results to output file and return list of dicts with category, url, type, content. You will use the SerperDevTool, the FirecrawlCrawlWebsiteTool and the FirecrawlScrapeWebsiteTool, make sure to pass the correct parameters to each correspondent function. Make sure to first search the internet with SerperDevTool and then user FireCrawl's more advanced tools for further crawling.
+  expected_output: >
+    List of dicts: {'category': str, 'url': str, 'type': str, 'content': str}
+  agent: extractor
+  output_file: 'output/try_1/raw_extraction_output.txt'
+
+process_task:
+  description: >
+    Read the extracted data from the output of the previous task, the file name is 'raw_extraction_output.txt'. Map to structured database schemas like Resumen_Informe_Financiero. Handle financial, movements, macro, contracts. Return structured data and save to output file.
+  expected_output: >
+    Structured dicts for schemas like Resumen_Informe_Financiero
+  agent: processor
+  # context: extract_task
+  output_file: 'output/try_1/structured_data_output.txt'
+
+vectorize_task: 
+  description: >
+    Read both 'output/try_1/raw_extraction_output.txt' and 'output/try_1/structured_data_output.txt' to identify content relationships between raw and structured data, then create semantic embeddings for comprehensive search capabilities. Chunk the raw content into overlapping 300-800 token segments while preserving semantic boundaries, ensuring each chunk maps back to relevant structured data entries. Generate high-quality embeddings using appropriate models and prepare Pinecone-ready vectors with unique IDs, normalized embedding values, and rich metadata including source references, structured data relationships, content classification, processing timestamps, and semantic density scores. Save the complete vector dataset to an output file, ensuring the vectorized content complements structured data by capturing detailed context and nuances that summaries compress, enabling both precise structured queries and semantic similarity search across the full content spectrum.
+  expected_output: >
+    List of dicts: [{'id': str, 'values': [float], 'metadata': {'source_file': str, 'structured_data_refs': [str], 'content_type': str, 'chunk_index': int, 'word_count': int}}]
+  # context: [process_task, extract_task]
+  output_file: 'output/try_1/vector_data_output.txt'
+  agent: vector
+
+load_task:
+  description: >
+    Read the structured data from 'output/try_1/structured_data_output.txt' and vector data from 'output/try_1/vector_data_output.txt' and print them alongside eachother so that a Human can read which vector data refers to which structured data.
+  expected_output: >
+    Dict with "{'id_of_structured_data': 'data_of_correspondent_vector'}"
+  output_file: 'output/try_1/loading_results_output.txt'
+  agent: loader
+  # context: [process_task, vectorize_task]
