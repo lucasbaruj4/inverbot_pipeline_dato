@@ -1,6 +1,7 @@
 extract_task:
   description: >
-    Extract raw data from the provided sources: {sources_list}. Handle types: JSON, TEXT, PDF, EXCEL, PNG. Save results to output file and return list of dicts with category, url, type, content. You will use the SerperDevTool, the FirecrawlCrawlWebsiteTool and the FirecrawlScrapeWebsiteTool, make sure to pass the correct parameters to each correspondent function. Make sure to first search the internet with SerperDevTool and then user FireCrawl's more advanced tools for further crawling.
+    Extract raw data from web sources. Handle types: JSON, TEXT, PDF, EXCEL, PNG. 
+    Save results to output file and return list of dicts with category, url, type, content.
   expected_output: >
     List of dicts: {'category': str, 'url': str, 'type': str, 'content': str}
   agent: extractor
