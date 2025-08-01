@@ -3,7 +3,7 @@ import os
 
 response = requests.post(
     "https://api.firecrawl.dev/v1/crawl",
-    headers={"Authorization":"Bearer: fc-ff1c3ee38f5043cebe7940744657ff3e"},
+    headers={"Authorization":"Bearer: API"},
     json={"url":"https://en.wikipedia.org/wiki/OpenAI",
           "maxDepth":3,
           "scrapeOptions": {

@@ -5,6 +5,7 @@ from typing import List
 import os
 import json
 import requests
+from supabase import create_client, Client
 from inverbot_pipeline_dato.data import data_source 
 from crewai_tools import (
     # SerperDevTool,
@@ -1265,16 +1266,69 @@ class InverbotPipelineDato():
         
         return firecrawl_crawl(url, prompt, schema, test_mode)
     
-    @tool("Supabase Query Tool")
-    def query_supabase(table_name:str, query_params:dict) -> dict:
-        """Query Supabase to check if data already exists without inserting
-        
-        Args: 
-            table_name: Name of the table to query
-            query_params: Dictionary with query parameters (column names and values)
-            
+    @tool("Filter Duplicate Data Tool")
+    def filter_duplicate_data(structured_data:dict) -> dict:
+        """Filter out data that already exists in Supabase
+
+        Args:
+            structured_data: Dicionary with structured data by table
+
         Returns:
-            DÑ"""
+            Dictionary with filtered data and report
+        """
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_KEY")
+        
+        if not supabase_url or not supabase_key:
+            return {"error": "Supabase credentials not found in environmental variables"}
+        
+        try:
+            supabase = create_client(supabase_url, supabase_url)
+            
+            filtered_data = {
+                "new_data": {},
+                "existing_data": {},
+                "report": {
+                    "total_records": 0,
+                    "new_records": 0,
+                    "existing_records": 0,
+                    "tables_processed": []
+                }
+            }
+            
+            for table_name, records in structured_data.items():
+                filtered_data["new_data"][table_name] = []
+                filtered_data["existing_data"][table_name] = []
+                table_report = {
+                    "table": table_name,
+                    "total": len(records),
+                    "new": 0,
+                    "existing": 0
+                }
+                
+                if not records:
+                    filtered_data["report"]["tables_procressed"].append(table_report)
+                    continue
+                
+################ informar a claude sobre estructura real de base de datos aca
+                key_field = None
+                if table_name == "Informe_General" and records and "titulo_informe" in records[0]:
+                    key_field = "titulo_informe"
+                elif table_name == "Emisores" and records and "nombre_emisor" in records[0]:
+                    key_field = "nombre_emisor"
+                elif table_name == "Categoria_Emisor" and records and "categoria_emisor" in records[0]:
+                    key_field = "categoria_emisor"
+                    
+                if not key_field:
+                    filtered_data["new_data"][table_name] = records
+                    table_report["new"] = len(records)
+                    filtered_data["report"]["total_records"] += len(records)
+                    filtered_data["report"]["new_records"] += len(records)
+                    filtered_data["report"]["tables_processed"].append(table_report)
+                    continue
+                
+                for record in records: 
+                    filtered_data["report"]["total_records"]
     
     @agent
     def extractor(self) -> Agent:
