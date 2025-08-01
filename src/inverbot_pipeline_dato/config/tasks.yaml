@@ -1,9 +1,51 @@
 extract_task:
   description: >
-    Extract raw data from web sources. Handle types: JSON, TEXT, PDF, EXCEL, PNG. 
-    Save results to output file and return list of dicts with category, url, type, content.
+    Extract metadata and structured data from financial and economic web sources using the provided scraping tools. 
+    Each tool is specialized for a specific source and will extract data according to predefined JSON schemas.
+    
+    Process:
+    1. Use the appropriate tool for each data source (BVA, INE, DNIT, etc.)
+    2. For each tool, the data will be extracted according to its specific schema:
+       - Informes/documentos (Informe_General): títulos, URLs, fechas
+       - Emisores/entidades (Emisores): nombres, categorías
+       - En algunos casos, datos estadísticos o macroeconómicos cuando están visibles en imágenes o tablas
+    
+    Important considerations:
+    - Initial extractions should be in test_mode=True to validate functionality with minimal credit usage
+    - Focus on metadata extraction only - do not attempt to parse document contents at this stage
+    - Maintain relationships between extracted entities using consistent IDs
+    - Be aware that some data is presented in images or interactive elements (especially in DNIT inversión)
+    - For pages with pagination, ensure all relevant pages are explored
+    
+    Your extraction results will be passed to the 'processor' agent for structured database storage and to the 
+    'vector' agent for document vectorization.
   expected_output: >
-    List of dicts: {'category': str, 'url': str, 'type': str, 'content': str}
+    JSON object with the following structure:
+    {
+      "source_name": {
+        "Informe_General": [
+          {
+            "id_informe": integer,
+            "titulo_informe": string,
+            "url_descarga_original": string,
+            "fecha_publicacion": string (YYYY-MM-DD format when available),
+            "id_emisor": integer (reference to Emisores table)
+          },
+          ...
+        ],
+        "Emisores": [
+          {
+            "id_emisor": integer,
+            "nombre_emisor": string
+          },
+          ...
+        ],
+        "urls_pendientes": [
+          string (URLs that need further processing)
+        ]
+      },
+      ...
+    }
   agent: extractor
   output_file: 'output/try_1/raw_extraction_output.txt'
 
