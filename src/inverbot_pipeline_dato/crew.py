@@ -1,3 +1,4 @@
+import datetime
 from crewai import Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, crew, task
 from crewai.agents.agent_builder.base_agent import BaseAgent
@@ -6,6 +7,7 @@ import os
 import json
 import requests
 from supabase import create_client, Client
+from pinecone import Pinecone
 from inverbot_pipeline_dato.data import data_source 
 from crewai_tools import (
     # SerperDevTool,
@@ -1283,7 +1285,7 @@ class InverbotPipelineDato():
             return {"error": "Supabase credentials not found in environmental variables"}
         
         try:
-            supabase = create_client(supabase_url, supabase_url)
+            supabase = create_client(supabase_url, supabase_key)
             
             filtered_data = {
                 "new_data": {},
@@ -1307,17 +1309,34 @@ class InverbotPipelineDato():
                 }
                 
                 if not records:
-                    filtered_data["report"]["tables_procressed"].append(table_report)
+                    filtered_data["report"]["tables_processed"].append(table_report)
                     continue
                 
-################ informar a claude sobre estructura real de base de datos aca
+                # Reemplaza la sección marcada con este código:
                 key_field = None
-                if table_name == "Informe_General" and records and "titulo_informe" in records[0]:
-                    key_field = "titulo_informe"
-                elif table_name == "Emisores" and records and "nombre_emisor" in records[0]:
-                    key_field = "nombre_emisor"
-                elif table_name == "Categoria_Emisor" and records and "categoria_emisor" in records[0]:
-                    key_field = "categoria_emisor"
+                unique_fields = []
+
+                # Definir campos únicos para cada tabla basado en la estructura de Supabase
+                table_unique_fields = {
+                    "Categoria_Emisor": ["categoria_emisor"],
+                    "Emisores": ["nombre_emisor"],
+                    "Moneda": ["codigo_moneda"],
+                    "Frecuencia": ["nombre_frecuencia"],
+                    "Tipo_Informe": ["nombre_tipo_informe"],
+                    "Periodo_Informe": ["nombre_periodo"],
+                    "Unidad_Medida": ["simbolo"],
+                    "Instrumento": ["simbolo_instrumento"],
+                    "Informe_General": ["titulo_informe", "fecha_publicacion"],
+                    "Resumen_Informe_Financiero": ["id_informe", "fecha_corte_informe"],
+                    "Dato_Macroeconomico": ["indicador_nombre", "fecha_dato", "id_emisor"],
+                    "Movimiento_Diario_Bolsa": ["fecha_operacion", "id_instrumento", "id_emisor"],
+                    "Licitacion_Contrato": ["titulo", "fecha_adjudicacion"]
+                }
+
+                if table_name in table_unique_fields:
+                    unique_fields = table_unique_fields[table_name]
+                    if records and all(field in records[0] for field in unique_fields):
+                        key_field = unique_fields[0]  # Usar el primer campo como principal
                     
                 if not key_field:
                     filtered_data["new_data"][table_name] = records
@@ -1326,9 +1345,535 @@ class InverbotPipelineDato():
                     filtered_data["report"]["new_records"] += len(records)
                     filtered_data["report"]["tables_processed"].append(table_report)
                     continue
-                
+
                 for record in records: 
-                    filtered_data["report"]["total_records"]
+                    filtered_data["report"]["total_records"] += 1
+                    
+                    # Construir query con múltiples campos únicos si es necesario
+                    query = supabase.table(table_name).select("*")
+                    for field in unique_fields:
+                        if field in record:
+                            query = query.eq(field, record[field])
+                    
+                    result = query.execute()
+                    
+                    if result.data and len(result.data) > 0:
+                        filtered_data["existing_data"][table_name].append(record)
+                        filtered_data["report"]["existing_records"] += 1
+                        table_report["existing"] += 1
+                    else: 
+                        filtered_data["new_data"][table_name].append(record)
+                        filtered_data["report"]["new_records"] += 1
+                        table_report["new"] += 1
+                filtered_data["report"]["tables_processed"].append(table_report)  
+            return filtered_data
+        except Exception as e:
+            return {"error": f"Error filtering duplicate data : {str(e)}", "structured_data": structured_data}
+        
+    
+    @tool("Filter Duplicate Vectors Tool")
+    def filter_duplicate_vectors(vector_data: list, index_name: str) -> dict:
+        """Filter out vector data that already exists in Pinecone.
+        
+        Args:
+            vector_data: List of prepared vector data entries
+            index_name: Name of the Pinecone index
+            
+        Returns:
+            Dictionary with filtered vector data and report
+        """
+        pinecone_api_key = os.getenv("PINECONE_API_KEY")
+        
+        if not pinecone_api_key:
+            return {"error": "Pinecone API key not found in environment variables"}
+        
+        try:
+            
+            
+            # Initialize Pinecone (nueva sintaxis)
+            pc = Pinecone(api_key=pinecone_api_key)
+            
+            # Verificar si el índice existe
+            if index_name not in [idx.name for idx in pc.list_indexes()]:
+                return {"error": f"Index '{index_name}' does not exist in Pinecone"}
+            
+            index = pc.Index(index_name)
+            
+            filtered_data = {
+                "new_vectors": [],
+                "existing_vectors": [],
+                "report": {
+                    "total_vectors": len(vector_data),
+                    "new_vectors": 0,
+                    "existing_vectors": 0,
+                    "index_name": index_name
+                }
+            }
+            
+            # Definir campos únicos por índice según tu estructura
+            unique_field_mapping = {
+                "documentos-informes-vector": ["id_informe", "chunk_id"],
+                "dato-macroeconomico-vector": ["id_dato_macro", "chunk_id"],
+                "licitacion-contrato-vector": ["id_licitacion_contrato", "chunk_id"]
+            }
+            
+            if index_name not in unique_field_mapping:
+                # Si no conocemos el índice, tratamos todos como nuevos
+                filtered_data["new_vectors"] = vector_data
+                filtered_data["report"]["new_vectors"] = len(vector_data)
+                return filtered_data
+            
+            unique_fields = unique_field_mapping[index_name]
+            
+            # Procesar cada vector individualmente
+            for vector in vector_data:
+                if "metadata" not in vector:
+                    filtered_data["new_vectors"].append(vector)
+                    filtered_data["report"]["new_vectors"] += 1
+                    continue
+                
+                metadata = vector["metadata"]
+                
+                # Verificar que los campos únicos existan
+                if not all(field in metadata for field in unique_fields):
+                    filtered_data["new_vectors"].append(vector)
+                    filtered_data["report"]["new_vectors"] += 1
+                    continue
+                
+                # Construir filtro de metadatos
+                metadata_filter = {}
+                for field in unique_fields:
+                    metadata_filter[field] = {"$eq": metadata[field]}
+                
+                # Query para verificar existencia
+                try:
+                    result = index.query(
+                        vector=[0.0] * 768,  # Vector dummy
+                        filter=metadata_filter,
+                        top_k=1,
+                        include_metadata=False
+                    )
+                    
+                    if result.get("matches", []):
+                        filtered_data["existing_vectors"].append(vector)
+                        filtered_data["report"]["existing_vectors"] += 1
+                    else:
+                        filtered_data["new_vectors"].append(vector)
+                        filtered_data["report"]["new_vectors"] += 1
+                        
+                except Exception as query_error:
+                    # Si falla la query, tratamos como nuevo por seguridad
+                    filtered_data["new_vectors"].append(vector)
+                    filtered_data["report"]["new_vectors"] += 1
+            
+            return filtered_data
+            
+        except Exception as e:
+            return {"error": f"Error filtering duplicate vectors: {str(e)}", "vector_data": vector_data}
+    
+    
+    @tool("Supabase Data Loading Tool")
+    def load_data_to_supabase(table_name: str, data: list) -> str:
+        """Load structured data into a Supabase table.
+        
+        Args:
+            table_name: Name of the table to load data into
+            data: List of records to insert
+            
+        Returns:
+            Loading report as JSON string
+        """
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_KEY")
+        
+        if not supabase_url or not supabase_key:
+            return json.dumps({"error": "Supabase credentials not found in environment variables"})
+        
+        if not data:
+            return json.dumps({"error": "No data provided to load"})
+        
+        try:
+            # Initialize Supabase client - FIX: usar supabase_key en lugar de supabase_url
+            supabase = create_client(supabase_url, supabase_key)
+            
+            loading_report = {
+                "table": table_name,
+                "total_records": len(data),
+                "inserted": 0,
+                "skipped": 0,
+                "errors": [],
+                "batches_processed": 0
+            }
+            
+            # Validar estructura de datos
+            if not isinstance(data, list) or not all(isinstance(record, dict) for record in data):
+                return json.dumps({"error": "Data must be a list of dictionaries"})
+            
+            # Process in smaller batches para evitar timeouts
+            batch_size = 50  # Reducir batch size
+            total_batches = (len(data) + batch_size - 1) // batch_size
+            
+            for i in range(0, len(data), batch_size):
+                batch = data[i:i+batch_size]
+                loading_report["batches_processed"] += 1
+                
+                try:
+                    # Intentar inserción por lotes primero
+                    result = supabase.table(table_name).insert(batch).execute()
+                    loading_report["inserted"] += len(batch)
+                    
+                except Exception as batch_error:
+                    # Si falla el lote, intentar uno por uno
+                    for j, record in enumerate(batch):
+                        try:
+                            result = supabase.table(table_name).insert(record).execute()
+                            loading_report["inserted"] += 1
+                        except Exception as record_error:
+                            loading_report["skipped"] += 1
+                            loading_report["errors"].append({
+                                "batch": loading_report["batches_processed"],
+                                "record_index": i + j,
+                                "record": record,
+                                "error": str(record_error)
+                            })
+            
+            # Agregar estadísticas finales
+            loading_report["success_rate"] = (loading_report["inserted"] / loading_report["total_records"]) * 100
+            loading_report["status"] = "completed"
+            
+            return json.dumps(loading_report, indent=2)
+            
+        except Exception as e:
+            return json.dumps({
+                "error": f"Critical error loading data to Supabase: {str(e)}",
+                "table": table_name,
+                "status": "failed"
+            })
+
+
+    @tool("Pinecone Vector Loading Tool")
+    def load_vectors_to_pinecone(index_name: str, vector_data: list) -> str:
+        """Generate embeddings and load vector data into Pinecone.
+        
+        Args:
+            index_name: Name of the Pinecone index
+            vector_data: List of prepared vector data entries with 'text', 'id', 'metadata'
+            
+        Returns:
+            Loading report as JSON string
+        """
+        pinecone_api_key = os.getenv("PINECONE_API_KEY")
+        gemini_api_key = os.getenv("GEMINI_API_KEY")  
+        
+        if not pinecone_api_key:
+            return json.dumps({"error": "Pinecone API key not found in environment variables"})
+        
+        if not gemini_api_key:  # Cambio aquí
+            return json.dumps({"error": "Gemini API key not found in environment variables"})
+        
+        if not vector_data:
+            return json.dumps({"error": "No vector data provided to load"})
+        
+        try:
+            # Initialize Pinecone y Gemini
+            from pinecone import Pinecone
+            import google.generativeai as genai  # Cambio aquí
+            
+            pc = Pinecone(api_key=pinecone_api_key)
+            genai.configure(api_key=gemini_api_key)  # Nueva configuración
+            
+            # Check if index exists
+            if index_name not in [idx.name for idx in pc.list_indexes()]:
+                return json.dumps({"error": f"Index '{index_name}' does not exist in Pinecone"})
+            
+            index = pc.Index(index_name)
+            
+            loading_report = {
+                "index": index_name,
+                "total_vectors": len(vector_data),
+                "processed": 0,
+                "loaded": 0,
+                "errors": [],
+                "batches_processed": 0,
+                "embedding_model": "models/embedding-001"  # Cambio aquí
+            }
+            
+            # Validar estructura de vector_data
+            for i, entry in enumerate(vector_data[:5]):
+                if not all(key in entry for key in ["text", "id", "metadata"]):
+                    return json.dumps({
+                        "error": f"Invalid vector data structure at index {i}. Required keys: 'text', 'id', 'metadata'"
+                    })
+            
+            # Process in smaller batches
+            batch_size = 20
+            
+            for i in range(0, len(vector_data), batch_size):
+                batch = vector_data[i:i+batch_size]
+                vectors_to_upsert = []
+                loading_report["batches_processed"] += 1
+                
+                # Create embeddings for batch
+                for entry in batch:
+                    try:
+                        # Validar que el texto no esté vacío
+                        if not entry["text"] or not entry["text"].strip():
+                            loading_report["errors"].append({
+                                "vector_id": entry.get("id", "unknown"),
+                                "error": "Empty text content"
+                            })
+                            continue
+                        
+                        # Create embedding con Gemini
+                        response = genai.embed_content(
+                            model="models/embedding-001",
+                            content=entry["text"].strip(),
+                            task_type="retrieval_document"  # Para documentos
+                        )
+                        embedding = response['embedding']
+                        
+                        # Validar dimensiones del embedding (768 para Gemini)
+                        if len(embedding) != 768:
+                            loading_report["errors"].append({
+                                "vector_id": entry["id"],
+                                "error": f"Invalid embedding dimension: {len(embedding)}"
+                            })
+                            continue
+                        
+                        vectors_to_upsert.append({
+                            "id": str(entry["id"]),
+                            "values": embedding,
+                            "metadata": entry["metadata"]
+                        })
+                        
+                        loading_report["processed"] += 1
+                        
+                    except Exception as e:
+                        loading_report["errors"].append({
+                            "vector_id": entry.get("id", "unknown"),
+                            "error": f"Embedding creation failed: {str(e)}"
+                        })
+                
+                # Upsert vectors if any were created successfully
+                if vectors_to_upsert:
+                    try:
+                        index.upsert(vectors=vectors_to_upsert)
+                        loading_report["loaded"] += len(vectors_to_upsert)
+                    except Exception as e:
+                        loading_report["errors"].append({
+                            "batch": loading_report["batches_processed"],
+                            "error": f"Upsert failed: {str(e)}"
+                        })
+            
+            # Estadísticas finales
+            loading_report["success_rate"] = (loading_report["loaded"] / loading_report["total_vectors"]) * 100 if loading_report["total_vectors"] > 0 else 0
+            loading_report["status"] = "completed"
+            
+            return json.dumps(loading_report, indent=2)
+            
+        except Exception as e:
+            return json.dumps({
+                "error": f"Critical error loading vectors to Pinecone: {str(e)}",
+                "index": index_name,
+                "status": "failed"
+            })
+
+    @tool("Data Loading Status Tool")
+    def check_loading_status(tables_to_check: list = None, indexes_to_check: list = None) -> dict:
+        """Check the loading status of data in Supabase and Pinecone.
+        
+        Args:
+            tables_to_check: List of Supabase tables to check (optional)
+            indexes_to_check: List of Pinecone indexes to check (optional)
+            
+        Returns:
+            Status report dictionary
+        """
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_KEY")
+        pinecone_api_key = os.getenv("PINECONE_API_KEY")
+        
+        status_report = {
+            "supabase_status": {},
+            "pinecone_status": {},
+            "timestamp": datetime.now().isoformat(),
+            "summary": {
+                "supabase_tables_checked": 0,
+                "pinecone_indexes_checked": 0,
+                "total_supabase_records": 0,
+                "total_pinecone_vectors": 0
+            }
+        }
+        
+        # Check Supabase status
+        if supabase_url and supabase_key:
+            try:
+                supabase = create_client(supabase_url, supabase_key)
+                
+                # Si no se especifican tablas, usar las del esquema
+                if not tables_to_check:
+                    tables_to_check = [
+                        "Categoria_Emisor", "Emisores", "Moneda", "Frecuencia", 
+                        "Tipo_Informe", "Periodo_Informe", "Unidad_Medida", 
+                        "Instrumento", "Informe_General", "Resumen_Informe_Financiero",
+                        "Dato_Macroeconomico", "Movimiento_Diario_Bolsa", "Licitacion_Contrato"
+                    ]
+                
+                for table in tables_to_check:
+                    try:
+                        # FIX: Usar count() correctamente
+                        result = supabase.table(table).select("*", count="exact", head=True).execute()
+                        count = result.count or 0
+                        
+                        status_report["supabase_status"][table] = {
+                            "count": count,
+                            "status": "loaded" if count > 0 else "empty"
+                        }
+                        status_report["summary"]["total_supabase_records"] += count
+                        status_report["summary"]["supabase_tables_checked"] += 1
+                        
+                    except Exception as table_error:
+                        status_report["supabase_status"][table] = {
+                            "error": str(table_error),
+                            "status": "error"
+                        }
+                        
+            except Exception as e:
+                status_report["supabase_status"]["connection_error"] = str(e)
+        else:
+            status_report["supabase_status"]["error"] = "Supabase credentials not found"
+        
+        # Check Pinecone status
+        if pinecone_api_key:
+            try:
+                from pinecone import Pinecone
+                pc = Pinecone(api_key=pinecone_api_key)
+                
+                available_indexes = [idx.name for idx in pc.list_indexes()]
+                status_report["pinecone_status"]["available_indexes"] = available_indexes
+                
+                # Si no se especifican índices, usar los del esquema
+                if not indexes_to_check:
+                    indexes_to_check = [
+                        "documentos-informes-vector", 
+                        "dato-macroeconomico-vector", 
+                        "licitacion-contrato-vector"
+                    ]
+                
+                for index_name in indexes_to_check:
+                    try:
+                        if index_name in available_indexes:
+                            index = pc.Index(index_name)
+                            stats = index.describe_index_stats()
+                            
+                            vector_count = stats.get("total_vector_count", 0)
+                            status_report["pinecone_status"][index_name] = {
+                                "vector_count": vector_count,
+                                "dimension": stats.get("dimension", 0),
+                                "status": "loaded" if vector_count > 0 else "empty"
+                            }
+                            status_report["summary"]["total_pinecone_vectors"] += vector_count
+                        else:
+                            status_report["pinecone_status"][index_name] = {
+                                "status": "not_found",
+                                "error": "Index does not exist"
+                            }
+                        
+                        status_report["summary"]["pinecone_indexes_checked"] += 1
+                        
+                    except Exception as index_error:
+                        status_report["pinecone_status"][index_name] = {
+                            "error": str(index_error),
+                            "status": "error"
+                        }
+                        
+            except Exception as e:
+                status_report["pinecone_status"]["connection_error"] = str(e)
+        else:
+            status_report["pinecone_status"]["error"] = "Pinecone API key not found"
+        
+        return status_report
+
+
+    @tool("Batch Data Validation Tool")
+    def validate_data_before_loading(table_name: str, data: list, index_name: str = None, vector_data: list = None) -> dict:
+        """Validate data structure before loading to databases.
+        
+        Args:
+            table_name: Supabase table name for structured data
+            data: Structured data to validate
+            index_name: Pinecone index name (optional)
+            vector_data: Vector data to validate (optional)
+            
+        Returns:
+            Validation report dictionary
+        """
+        validation_report = {
+            "supabase_validation": {"valid": False, "errors": []},
+            "pinecone_validation": {"valid": False, "errors": []},
+            "recommendations": []
+        }
+        
+        # Validar datos de Supabase
+        if data:
+            try:
+                # Verificar que sea una lista
+                if not isinstance(data, list):
+                    validation_report["supabase_validation"]["errors"].append("Data must be a list")
+                elif len(data) == 0:
+                    validation_report["supabase_validation"]["errors"].append("Data list is empty")
+                else:
+                    # Verificar estructura de registros
+                    for i, record in enumerate(data[:10]):  # Validar primeros 10
+                        if not isinstance(record, dict):
+                            validation_report["supabase_validation"]["errors"].append(f"Record {i} is not a dictionary")
+                        elif len(record) == 0:
+                            validation_report["supabase_validation"]["errors"].append(f"Record {i} is empty")
+                    
+                    if not validation_report["supabase_validation"]["errors"]:
+                        validation_report["supabase_validation"]["valid"] = True
+                        validation_report["recommendations"].append(f"Supabase data for {table_name} is valid for loading")
+                        
+            except Exception as e:
+                validation_report["supabase_validation"]["errors"].append(f"Validation error: {str(e)}")
+        
+        # Validar datos de Pinecone
+        if vector_data and index_name:
+            try:
+                if not isinstance(vector_data, list):
+                    validation_report["pinecone_validation"]["errors"].append("Vector data must be a list")
+                elif len(vector_data) == 0:
+                    validation_report["pinecone_validation"]["errors"].append("Vector data list is empty")
+                else:
+                    # Verificar estructura de vectores
+                    required_keys = ["text", "id", "metadata"]
+                    for i, vector in enumerate(vector_data[:5]):  # Validar primeros 5
+                        if not isinstance(vector, dict):
+                            validation_report["pinecone_validation"]["errors"].append(f"Vector {i} is not a dictionary")
+                        elif not all(key in vector for key in required_keys):
+                            missing_keys = [key for key in required_keys if key not in vector]
+                            validation_report["pinecone_validation"]["errors"].append(f"Vector {i} missing keys: {missing_keys}")
+                        elif not vector.get("text", "").strip():
+                            validation_report["pinecone_validation"]["errors"].append(f"Vector {i} has empty text content")
+                    
+                    if not validation_report["pinecone_validation"]["errors"]:
+                        validation_report["pinecone_validation"]["valid"] = True
+                        validation_report["recommendations"].append(f"Vector data for {index_name} is valid for loading")
+                        
+            except Exception as e:
+                validation_report["pinecone_validation"]["errors"].append(f"Validation error: {str(e)}")
+        
+        # Recomendaciones generales
+        if validation_report["supabase_validation"]["valid"] and validation_report["pinecone_validation"]["valid"]:
+            validation_report["recommendations"].append("All data is valid. Proceed with loading.")
+        elif validation_report["supabase_validation"]["valid"]:
+            validation_report["recommendations"].append("Only Supabase data is valid. Check Pinecone data before loading.")
+        elif validation_report["pinecone_validation"]["valid"]:
+            validation_report["recommendations"].append("Only Pinecone data is valid. Check Supabase data before loading.")
+        else:
+            validation_report["recommendations"].append("Data validation failed. Fix errors before loading.")
+        
+        return validation_report
     
     @agent
     def extractor(self) -> Agent:
@@ -1356,7 +1901,10 @@ class InverbotPipelineDato():
         return Agent(
             config=self.agents_config['processor'], # type: ignore[index]
             verbose=True,
-            llm=self.model_llm
+            llm=self.model_llm,
+            tools=[
+                self.filter_duplicate_data,
+            ]
         )
         
     @agent
@@ -1364,7 +1912,10 @@ class InverbotPipelineDato():
         return Agent(
             config=self.agents_config['vector'], # type: ignore[index]
             verbose=True,
-            llm=self.model_llm
+            llm=self.model_llm,
+            tools=[
+                self.filter_duplicate_data
+            ]
         )
 
     @agent
@@ -1372,7 +1923,13 @@ class InverbotPipelineDato():
         return Agent(
             config=self.agents_config['loader'], # type: ignore[index]
             verbose=True,
-            llm=self.model_llm
+            llm=self.model_llm,
+            tools=[
+                self.load_data_to_supabase,
+                self.load_vectors_to_pinecone,
+                self.check_loading_status,
+                self.validate_data_before_loading
+            ]
         )
 
     @task
