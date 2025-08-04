@@ -7,6 +7,12 @@ requires-python = ">=3.10,<3.14"
 dependencies = [
     "crewai[tools]>=0.150.0,<1.0.0",
     "firecrawl-py",
+    "supabase>=2.0.0",
+    "pinecone>=4.0.0",
+    "google-generativeai>=0.3.0",
+    "PyMuPDF>=1.23.0",
+    "tiktoken>=0.5.0",
+    "requests>=2.31.0",
 ]
 
 [project.scripts]

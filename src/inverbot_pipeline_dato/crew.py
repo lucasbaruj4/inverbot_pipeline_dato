@@ -133,6 +133,158 @@ class InverbotPipelineDato():
     agents_config = 'config/agents.yaml'
     tasks_config = 'config/tasks.yaml'
     test_mode = True # Modo de prueba para extractos chicos
+    
+    # Performance tracking variables
+    def __init__(self):
+        super().__init__()
+        self.performance_metrics = {
+            "pipeline_start_time": None,
+            "pipeline_end_time": None,
+            "agents_performance": {},
+            "tasks_performance": {},
+            "token_usage": {
+                "total_tokens": 0,
+                "firecrawl_credits": 0,
+                "embedding_calls": 0
+            },
+            "component_status": {
+                "extractor": {"status": "pending", "tools_used": [], "records_extracted": 0},
+                "processor": {"status": "pending", "tools_used": [], "records_processed": 0},
+                "vector": {"status": "pending", "tools_used": [], "vectors_created": 0},
+                "loader": {"status": "pending", "tools_used": [], "records_loaded": 0}
+            },
+            "errors": [],
+            "warnings": []
+        }
+    
+    def log_performance(self, message: str, level: str = "INFO"):
+        """Log performance message with timestamp"""
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        print(f"[{timestamp}] [{level}] {message}")
+        
+        if level == "ERROR":
+            self.performance_metrics["errors"].append(f"[{timestamp}] {message}")
+        elif level == "WARNING":
+            self.performance_metrics["warnings"].append(f"[{timestamp}] {message}")
+    
+    def track_agent_performance(self, agent_name: str, task_name: str, start_time: float, end_time: float, records_count: int = 0):
+        """Track individual agent performance"""
+        duration = end_time - start_time
+        
+        if agent_name not in self.performance_metrics["agents_performance"]:
+            self.performance_metrics["agents_performance"][agent_name] = []
+            
+        self.performance_metrics["agents_performance"][agent_name].append({
+            "task": task_name,
+            "duration_seconds": round(duration, 2),
+            "records_processed": records_count,
+            "timestamp": datetime.datetime.fromtimestamp(start_time).isoformat()
+        })
+        
+        # Update component status
+        if agent_name in self.performance_metrics["component_status"]:
+            self.performance_metrics["component_status"][agent_name]["status"] = "completed"
+            if agent_name == "extractor":
+                self.performance_metrics["component_status"][agent_name]["records_extracted"] += records_count
+            elif agent_name == "processor":
+                self.performance_metrics["component_status"][agent_name]["records_processed"] += records_count
+            elif agent_name == "vector":
+                self.performance_metrics["component_status"][agent_name]["vectors_created"] += records_count
+            elif agent_name == "loader":
+                self.performance_metrics["component_status"][agent_name]["records_loaded"] += records_count
+        
+        self.log_performance(f"Agent '{agent_name}' completed '{task_name}' in {duration:.2f}s, processed {records_count} records")
+    
+    def generate_performance_report(self) -> str:
+        """Generate comprehensive performance report"""
+        if self.performance_metrics["pipeline_start_time"] and self.performance_metrics["pipeline_end_time"]:
+            total_duration = self.performance_metrics["pipeline_end_time"] - self.performance_metrics["pipeline_start_time"]
+        else:
+            total_duration = 0
+            
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        report_file = f"output/test_results/performance_report_{timestamp}.md"
+        
+        os.makedirs("output/test_results", exist_ok=True)
+        
+        with open(report_file, 'w', encoding='utf-8') as f:
+            f.write("# InverBot Pipeline Performance Report\n\n")
+            f.write(f"**Generated**: {datetime.datetime.now().isoformat()}\n")
+            f.write(f"**Test Mode**: {'ENABLED' if self.test_mode else 'DISABLED'}\n")
+            f.write(f"**Total Pipeline Duration**: {total_duration:.2f} seconds\n\n")
+            
+            # Component Status Overview
+            f.write("## Component Status Overview\n\n")
+            for component, status in self.performance_metrics["component_status"].items():
+                status_icon = "[COMPLETED]" if status["status"] == "completed" else "[PENDING]" if status["status"] == "pending" else "[FAILED]"
+                f.write(f"- **{component.title()}**: {status_icon} {status['status'].title()}\n")
+                if component == "extractor":
+                    f.write(f"  - Records Extracted: {status['records_extracted']}\n")
+                elif component == "processor":
+                    f.write(f"  - Records Processed: {status['records_processed']}\n")
+                elif component == "vector":
+                    f.write(f"  - Vectors Created: {status['vectors_created']}\n")
+                elif component == "loader":
+                    f.write(f"  - Records Loaded: {status['records_loaded']}\n")
+            f.write("\n")
+            
+            # Agent Performance Details
+            f.write("## Agent Performance Details\n\n")
+            for agent, tasks in self.performance_metrics["agents_performance"].items():
+                f.write(f"### {agent.title()} Agent\n\n")
+                total_agent_time = sum(task["duration_seconds"] for task in tasks)
+                total_agent_records = sum(task["records_processed"] for task in tasks)
+                f.write(f"**Total Time**: {total_agent_time:.2f}s | **Total Records**: {total_agent_records}\n\n")
+                
+                for task in tasks:
+                    f.write(f"- **{task['task']}**: {task['duration_seconds']}s ({task['records_processed']} records)\n")
+                f.write("\n")
+            
+            # Token Usage
+            f.write("## Resource Usage\n\n")
+            f.write(f"- **Total Tokens**: {self.performance_metrics['token_usage']['total_tokens']}\n")
+            f.write(f"- **Firecrawl Credits**: {self.performance_metrics['token_usage']['firecrawl_credits']}\n")
+            f.write(f"- **Embedding API Calls**: {self.performance_metrics['token_usage']['embedding_calls']}\n\n")
+            
+            # Errors and Warnings
+            if self.performance_metrics["errors"]:
+                f.write("## Errors\n\n")
+                for error in self.performance_metrics["errors"]:
+                    f.write(f"- {error}\n")
+                f.write("\n")
+                
+            if self.performance_metrics["warnings"]:
+                f.write("## Warnings\n\n")
+                for warning in self.performance_metrics["warnings"]:
+                    f.write(f"- {warning}\n")
+                f.write("\n")
+                
+            # Quick Verification Checklist
+            f.write("## Quick Verification Checklist\n\n")
+            f.write("### Data Flow Verification\n")
+            f.write("- [ ] Extractor: Check raw extraction output files\n")
+            f.write("- [ ] Processor: Verify structured data output\n")
+            f.write("- [ ] Vector: Confirm chunking and metadata preparation\n")
+            f.write("- [ ] Loader: Review test mode output files\n\n")
+            
+            f.write("### Quality Checks\n")
+            f.write("- [ ] No critical errors in the pipeline\n")
+            f.write("- [ ] Record counts make sense across stages\n")
+            f.write("- [ ] Output files are properly formatted\n")
+            f.write("- [ ] Performance metrics within acceptable ranges\n\n")
+            
+            f.write("### Next Steps\n")
+            if self.test_mode:
+                f.write("- [ ] Review all test output files in `output/test_results/`\n")
+                f.write("- [ ] Verify data quality and completeness\n")
+                f.write("- [ ] Set `test_mode = False` for production run\n")
+            else:
+                f.write("- [ ] Verify data loaded correctly in Supabase\n")
+                f.write("- [ ] Check vector embeddings in Pinecone\n")
+                f.write("- [ ] Run data integrity checks\n")
+        
+        self.log_performance(f"Performance report saved to: {report_file}")
+        return report_file
 
 
     # 1. Balances de Empresas
@@ -1268,6 +1420,890 @@ class InverbotPipelineDato():
         
         return firecrawl_crawl(url, prompt, schema, test_mode)
     
+    @tool("Normalize Data Tool")
+    def normalize_data(raw_data: dict) -> dict:
+        """Normalize and clean raw extracted data from scrapers.
+        
+        Args:
+            raw_data: Dictionary with raw extracted data from scrapers
+            
+        Returns:
+            Dictionary with normalized and cleaned data
+        """
+        import re
+        from datetime import datetime
+        
+        try:
+            normalized_data = {
+                "normalized": {},
+                "report": {
+                    "total_records": 0,
+                    "normalized_records": 0,
+                    "errors": [],
+                    "tables_processed": []
+                }
+            }
+            
+            for source_name, source_data in raw_data.items():
+                if not isinstance(source_data, dict):
+                    continue
+                    
+                for table_name, records in source_data.items():
+                    if not isinstance(records, list):
+                        continue
+                        
+                    if table_name not in normalized_data["normalized"]:
+                        normalized_data["normalized"][table_name] = []
+                    
+                    table_report = {
+                        "table": table_name,
+                        "source": source_name,
+                        "total": len(records),
+                        "normalized": 0,
+                        "errors": 0
+                    }
+                    
+                    for i, record in enumerate(records):
+                        normalized_data["report"]["total_records"] += 1
+                        
+                        try:
+                            normalized_record = {}
+                            
+                            # Normalize each field in the record
+                            for field, value in record.items():
+                                if value is None or value == "":
+                                    normalized_record[field] = None
+                                    continue
+                                
+                                # Clean string fields
+                                if isinstance(value, str):
+                                    # Remove HTML tags and artifacts
+                                    cleaned_value = re.sub(r'<[^>]+>', '', value)
+                                    # Remove extra whitespace
+                                    cleaned_value = re.sub(r'\s+', ' ', cleaned_value).strip()
+                                    # Remove special characters except basic punctuation
+                                    cleaned_value = re.sub(r'[^\w\s\-\.\,\:\;\(\)\/\%\$]', '', cleaned_value)
+                                    
+                                    # Handle date fields
+                                    if 'fecha' in field.lower() or 'date' in field.lower():
+                                        try:
+                                            # Try to parse and standardize date format
+                                            if len(cleaned_value) >= 4 and cleaned_value.isdigit():
+                                                # Year only - convert to date
+                                                normalized_record[field] = f"{cleaned_value}-01-01"
+                                            elif '/' in cleaned_value:
+                                                # DD/MM/YYYY or MM/DD/YYYY format
+                                                parts = cleaned_value.split('/')
+                                                if len(parts) == 3:
+                                                    if len(parts[2]) == 4:  # YYYY
+                                                        normalized_record[field] = f"{parts[2]}-{parts[1].zfill(2)}-{parts[0].zfill(2)}"
+                                                    else:
+                                                        normalized_record[field] = cleaned_value
+                                                else:
+                                                    normalized_record[field] = cleaned_value
+                                            elif '-' in cleaned_value and len(cleaned_value) >= 8:
+                                                # Already in YYYY-MM-DD format or similar
+                                                normalized_record[field] = cleaned_value
+                                            else:
+                                                normalized_record[field] = cleaned_value
+                                        except:
+                                            normalized_record[field] = cleaned_value
+                                    else:
+                                        normalized_record[field] = cleaned_value
+                                
+                                # Handle numeric fields
+                                elif isinstance(value, (int, float)):
+                                    normalized_record[field] = value
+                                elif isinstance(value, str) and value.replace('.', '').replace(',', '').replace('-', '').isdigit():
+                                    try:
+                                        # Handle number strings with commas/periods
+                                        numeric_value = value.replace(',', '')
+                                        if '.' in numeric_value:
+                                            normalized_record[field] = float(numeric_value)
+                                        else:
+                                            normalized_record[field] = int(numeric_value)
+                                    except:
+                                        normalized_record[field] = value
+                                
+                                # Handle objects/dictionaries
+                                elif isinstance(value, dict):
+                                    normalized_record[field] = value
+                                
+                                # Handle arrays
+                                elif isinstance(value, list):
+                                    normalized_record[field] = value
+                                
+                                else:
+                                    normalized_record[field] = value
+                            
+                            normalized_data["normalized"][table_name].append(normalized_record)
+                            normalized_data["report"]["normalized_records"] += 1
+                            table_report["normalized"] += 1
+                            
+                        except Exception as e:
+                            normalized_data["report"]["errors"].append({
+                                "table": table_name,
+                                "source": source_name,
+                                "record_index": i,
+                                "error": str(e)
+                            })
+                            table_report["errors"] += 1
+                    
+                    normalized_data["report"]["tables_processed"].append(table_report)
+            
+            return normalized_data
+            
+        except Exception as e:
+            return {"error": f"Error normalizing data: {str(e)}", "raw_data": raw_data}
+
+    @tool("Validate Data Tool")
+    def validate_data(normalized_data: dict) -> dict:
+        """Validate normalized data against Supabase schemas.
+        
+        Args:
+            normalized_data: Dictionary with normalized data from normalize_data tool
+            
+        Returns:
+            Dictionary with validation results and filtered valid data
+        """
+        try:
+            validation_report = {
+                "valid_data": {},
+                "invalid_data": {},
+                "report": {
+                    "total_records": 0,
+                    "valid_records": 0,
+                    "invalid_records": 0,
+                    "errors": [],
+                    "tables_validated": []
+                }
+            }
+            
+            # Schema definitions based on Supabase structure
+            table_schemas = {
+                "Categoria_Emisor": {
+                    "required": ["categoria_emisor"],
+                    "optional": ["id_categoria_emisor"],
+                    "types": {
+                        "id_categoria_emisor": int,
+                        "categoria_emisor": str
+                    },
+                    "max_lengths": {
+                        "categoria_emisor": 100
+                    }
+                },
+                "Emisores": {
+                    "required": ["nombre_emisor"],
+                    "optional": ["id_emisor", "id_categoria_emisor", "calificacion_bva"],
+                    "types": {
+                        "id_emisor": int,
+                        "nombre_emisor": str,
+                        "id_categoria_emisor": int,
+                        "calificacion_bva": str
+                    },
+                    "max_lengths": {
+                        "nombre_emisor": 250,
+                        "calificacion_bva": 100
+                    }
+                },
+                "Moneda": {
+                    "required": ["codigo_moneda"],
+                    "optional": ["id_moneda", "nombre_moneda"],
+                    "types": {
+                        "id_moneda": int,
+                        "codigo_moneda": str,
+                        "nombre_moneda": str
+                    },
+                    "max_lengths": {
+                        "codigo_moneda": 10,
+                        "nombre_moneda": 50
+                    }
+                },
+                "Frecuencia": {
+                    "required": ["nombre_frecuencia"],
+                    "optional": ["id_frecuencia"],
+                    "types": {
+                        "id_frecuencia": int,
+                        "nombre_frecuencia": str
+                    },
+                    "max_lengths": {
+                        "nombre_frecuencia": 50
+                    }
+                },
+                "Tipo_Informe": {
+                    "required": ["nombre_tipo_informe"],
+                    "optional": ["id_tipo_informe"],
+                    "types": {
+                        "id_tipo_informe": int,
+                        "nombre_tipo_informe": str
+                    },
+                    "max_lengths": {
+                        "nombre_tipo_informe": 100
+                    }
+                },
+                "Periodo_Informe": {
+                    "required": ["nombre_periodo"],
+                    "optional": ["id_periodo"],
+                    "types": {
+                        "id_periodo": int,
+                        "nombre_periodo": str
+                    },
+                    "max_lengths": {
+                        "nombre_periodo": 50
+                    }
+                },
+                "Unidad_Medida": {
+                    "required": ["simbolo"],
+                    "optional": ["id_unidad_medida", "nombre_unidad"],
+                    "types": {
+                        "id_unidad_medida": int,
+                        "simbolo": str,
+                        "nombre_unidad": str
+                    },
+                    "max_lengths": {
+                        "simbolo": 10,
+                        "nombre_unidad": 50
+                    }
+                },
+                "Instrumento": {
+                    "required": ["simbolo_instrumento"],
+                    "optional": ["id_instrumento", "nombre_instrumento"],
+                    "types": {
+                        "id_instrumento": int,
+                        "simbolo_instrumento": str,
+                        "nombre_instrumento": str
+                    },
+                    "max_lengths": {
+                        "simbolo_instrumento": 50,
+                        "nombre_instrumento": 255
+                    }
+                },
+                "Informe_General": {
+                    "required": ["titulo_informe", "fecha_publicacion"],
+                    "optional": ["id_informe", "id_emisor", "id_tipo_informe", "id_frecuencia", "id_periodo", "resumen_informe", "url_descarga_original", "detalles_informe_jsonb"],
+                    "types": {
+                        "id_informe": int,
+                        "id_emisor": int,
+                        "id_tipo_informe": int,
+                        "id_frecuencia": int,
+                        "id_periodo": int,
+                        "titulo_informe": str,
+                        "resumen_informe": str,
+                        "fecha_publicacion": str,
+                        "url_descarga_original": str,
+                        "detalles_informe_jsonb": dict
+                    },
+                    "max_lengths": {
+                        "titulo_informe": 500,
+                        "url_descarga_original": 500
+                    }
+                },
+                "Resumen_Informe_Financiero": {
+                    "required": ["id_informe", "fecha_corte_informe"],
+                    "optional": ["id_resumen_financiero", "id_emisor", "moneda_informe", "activos_totales", "pasivos_totales", "patrimonio_neto", "disponible", "utilidad_del_ejercicio", "ingresos_totales", "costos_operacionales", "total_ganancias", "total_perdidas", "retorno_sobre_patrimonio", "calificacion_riesgo_tendencia", "utilidad_neta_por_accion_ordinaria", "deuda_total", "ebitda", "margen_neto", "flujo_caja_operativo", "capital_integrado", "otras_metricas_jsonb"],
+                    "types": {
+                        "id_resumen_financiero": int,
+                        "id_informe": int,
+                        "id_emisor": int,
+                        "fecha_corte_informe": str,
+                        "moneda_informe": int,
+                        "calificacion_riesgo_tendencia": str
+                    },
+                    "max_lengths": {
+                        "calificacion_riesgo_tendencia": 100
+                    }
+                },
+                "Dato_Macroeconomico": {
+                    "required": ["indicador_nombre", "fecha_dato", "valor_numerico"],
+                    "optional": ["id_dato_macro", "id_informe", "unidad_medida", "id_frecuencia", "link_fuente_especifico", "otras_propiedades_jsonb", "id_moneda", "id_emisor"],
+                    "types": {
+                        "id_dato_macro": int,
+                        "id_informe": int,
+                        "indicador_nombre": str,
+                        "fecha_dato": str,
+                        "valor_numerico": (int, float),
+                        "unidad_medida": int,
+                        "id_frecuencia": int,
+                        "link_fuente_especifico": str,
+                        "otras_propiedades_jsonb": dict,
+                        "id_moneda": int,
+                        "id_emisor": int
+                    },
+                    "max_lengths": {
+                        "indicador_nombre": 250,
+                        "link_fuente_especifico": 500
+                    }
+                },
+                "Movimiento_Diario_Bolsa": {
+                    "required": ["fecha_operacion", "id_instrumento", "precio_operacion"],
+                    "optional": ["id_operacion", "cantidad_operacion", "id_emisor", "fecha_vencimiento_instrumento", "id_moneda", "precio_anterior_instrumento", "tasa_interes_nominal", "tipo_cambio", "variacion_operacion", "volumen_gs_operacion"],
+                    "types": {
+                        "id_operacion": int,
+                        "fecha_operacion": str,
+                        "id_instrumento": int,
+                        "id_emisor": int,
+                        "fecha_vencimiento_instrumento": str,
+                        "id_moneda": int
+                    }
+                },
+                "Licitacion_Contrato": {
+                    "required": ["titulo"],
+                    "optional": ["id_licitacion_contrato", "id_emisor_adjudicado", "entidad_convocante", "monto_adjudicado", "id_moneda", "fecha_adjudicacion"],
+                    "types": {
+                        "id_licitacion_contrato": int,
+                        "id_emisor_adjudicado": int,
+                        "titulo": str,
+                        "entidad_convocante": str,
+                        "id_moneda": int,
+                        "fecha_adjudicacion": str
+                    },
+                    "max_lengths": {
+                        "titulo": 500,
+                        "entidad_convocante": 255
+                    }
+                }
+            }
+            
+            # Get normalized data 
+            data_to_validate = normalized_data.get("normalized", {})
+            
+            for table_name, records in data_to_validate.items():
+                if table_name not in table_schemas:
+                    validation_report["report"]["errors"].append({
+                        "table": table_name,
+                        "error": f"Unknown table schema for {table_name}"
+                    })
+                    continue
+                
+                schema = table_schemas[table_name]
+                validation_report["valid_data"][table_name] = []
+                validation_report["invalid_data"][table_name] = []
+                
+                table_report = {
+                    "table": table_name,
+                    "total": len(records),
+                    "valid": 0,
+                    "invalid": 0,
+                    "errors": []
+                }
+                
+                for i, record in enumerate(records):
+                    validation_report["report"]["total_records"] += 1
+                    is_valid = True
+                    record_errors = []
+                    
+                    # Check required fields
+                    for field in schema["required"]:
+                        if field not in record or record[field] is None or record[field] == "":
+                            is_valid = False
+                            record_errors.append(f"Missing required field: {field}")
+                    
+                    # Check field types and lengths
+                    for field, value in record.items():
+                        if value is None or value == "":
+                            continue
+                            
+                        # Type validation
+                        if field in schema["types"]:
+                            expected_type = schema["types"][field]
+                            if isinstance(expected_type, tuple):
+                                # Multiple types allowed (like int, float)
+                                if not isinstance(value, expected_type):
+                                    is_valid = False
+                                    record_errors.append(f"Field {field} should be one of {expected_type}, got {type(value)}")
+                            else:
+                                if not isinstance(value, expected_type):
+                                    is_valid = False
+                                    record_errors.append(f"Field {field} should be {expected_type}, got {type(value)}")
+                        
+                        # Length validation for strings
+                        if field in schema.get("max_lengths", {}) and isinstance(value, str):
+                            max_length = schema["max_lengths"][field]
+                            if len(value) > max_length:
+                                is_valid = False
+                                record_errors.append(f"Field {field} exceeds max length {max_length}: {len(value)}")
+                        
+                        # Date format validation
+                        if field.endswith("fecha") or "date" in field.lower():
+                            if isinstance(value, str) and value:
+                                # Basic date format check (YYYY-MM-DD)
+                                import re
+                                if not re.match(r'^\d{4}-\d{2}-\d{2}$', value):
+                                    is_valid = False
+                                    record_errors.append(f"Field {field} should be in YYYY-MM-DD format: {value}")
+                    
+                    if is_valid:
+                        validation_report["valid_data"][table_name].append(record)
+                        validation_report["report"]["valid_records"] += 1
+                        table_report["valid"] += 1
+                    else:
+                        validation_report["invalid_data"][table_name].append({
+                            "record": record,
+                            "errors": record_errors
+                        })
+                        validation_report["report"]["invalid_records"] += 1
+                        table_report["invalid"] += 1
+                        table_report["errors"].extend(record_errors)
+                
+                validation_report["report"]["tables_validated"].append(table_report)
+            
+            return validation_report
+            
+        except Exception as e:
+            return {"error": f"Error validating data: {str(e)}", "normalized_data": normalized_data}
+
+    @tool("Create Entity Relationships Tool")
+    def create_entity_relationships(validated_data: dict) -> dict:
+        """Create foreign key relationships between entities.
+        
+        Args:
+            validated_data: Dictionary with validated data from validate_data tool
+            
+        Returns:
+            Dictionary with data containing established relationships
+        """
+        try:
+            relationship_report = {
+                "data_with_relationships": {},
+                "created_entities": {},
+                "report": {
+                    "total_records": 0,
+                    "processed_records": 0,
+                    "relationship_errors": [],
+                    "created_master_entities": {},
+                    "tables_processed": []
+                }
+            }
+            
+            # Get valid data to process
+            valid_data = validated_data.get("valid_data", {})
+            
+            # Entity ID counters (start from 1)
+            entity_counters = {
+                "id_categoria_emisor": 1,
+                "id_emisor": 1,  
+                "id_moneda": 1,
+                "id_frecuencia": 1,
+                "id_tipo_informe": 1,
+                "id_periodo": 1,
+                "id_unidad_medida": 1,
+                "id_instrumento": 1,
+                "id_informe": 1,
+                "id_resumen_financiero": 1,
+                "id_dato_macro": 1,
+                "id_operacion": 1,
+                "id_licitacion_contrato": 1
+            }
+            
+            # Entity lookup dictionaries for resolving names to IDs
+            entity_lookups = {
+                "categoria_emisor": {},  # categoria_emisor -> id_categoria_emisor
+                "emisor": {},           # nombre_emisor -> id_emisor
+                "moneda": {},           # codigo_moneda -> id_moneda
+                "frecuencia": {},       # nombre_frecuencia -> id_frecuencia
+                "tipo_informe": {},     # nombre_tipo_informe -> id_tipo_informe
+                "periodo": {},          # nombre_periodo -> id_periodo
+                "unidad_medida": {},    # simbolo -> id_unidad_medida
+                "instrumento": {}       # simbolo_instrumento -> id_instrumento
+            }
+            
+            # Process master entities first to create lookup tables
+            master_entities = ["Categoria_Emisor", "Emisores", "Moneda", "Frecuencia", "Tipo_Informe", "Periodo_Informe", "Unidad_Medida", "Instrumento"]
+            
+            for table_name in master_entities:
+                if table_name not in valid_data:
+                    continue
+                
+                relationship_report["data_with_relationships"][table_name] = []
+                records = valid_data[table_name]
+                
+                table_report = {
+                    "table": table_name,
+                    "total": len(records),
+                    "processed": 0,
+                    "entities_created": 0
+                }
+                
+                for record in records:
+                    relationship_report["report"]["total_records"] += 1
+                    processed_record = record.copy()
+                    
+                    # Assign IDs and create lookups based on table
+                    if table_name == "Categoria_Emisor":
+                        if "id_categoria_emisor" not in processed_record or processed_record["id_categoria_emisor"] is None:
+                            processed_record["id_categoria_emisor"] = entity_counters["id_categoria_emisor"]
+                            entity_counters["id_categoria_emisor"] += 1
+                        
+                        # Create lookup
+                        categoria_name = processed_record.get("categoria_emisor")
+                        if categoria_name:
+                            entity_lookups["categoria_emisor"][categoria_name] = processed_record["id_categoria_emisor"]
+                    
+                    elif table_name == "Emisores":
+                        if "id_emisor" not in processed_record or processed_record["id_emisor"] is None:
+                            processed_record["id_emisor"] = entity_counters["id_emisor"]
+                            entity_counters["id_emisor"] += 1
+                        
+                        # Resolve categoria relationship
+                        if "categoria_emisor" in processed_record:
+                            categoria_name = processed_record["categoria_emisor"]
+                            if categoria_name in entity_lookups["categoria_emisor"]:
+                                processed_record["id_categoria_emisor"] = entity_lookups["categoria_emisor"][categoria_name]
+                            else:
+                                # Create new categoria if not found
+                                new_categoria_id = entity_counters["id_categoria_emisor"]
+                                entity_counters["id_categoria_emisor"] += 1
+                                entity_lookups["categoria_emisor"][categoria_name] = new_categoria_id
+                                processed_record["id_categoria_emisor"] = new_categoria_id
+                                
+                                # Add to Categoria_Emisor table
+                                if "Categoria_Emisor" not in relationship_report["data_with_relationships"]:
+                                    relationship_report["data_with_relationships"]["Categoria_Emisor"] = []
+                                relationship_report["data_with_relationships"]["Categoria_Emisor"].append({
+                                    "id_categoria_emisor": new_categoria_id,
+                                    "categoria_emisor": categoria_name
+                                })
+                        
+                        # Create lookup
+                        emisor_name = processed_record.get("nombre_emisor")
+                        if emisor_name:
+                            entity_lookups["emisor"][emisor_name] = processed_record["id_emisor"]
+                    
+                    elif table_name == "Moneda":
+                        if "id_moneda" not in processed_record or processed_record["id_moneda"] is None:
+                            processed_record["id_moneda"] = entity_counters["id_moneda"]
+                            entity_counters["id_moneda"] += 1
+                        
+                        # Create lookup
+                        codigo_moneda = processed_record.get("codigo_moneda")
+                        if codigo_moneda:
+                            entity_lookups["moneda"][codigo_moneda] = processed_record["id_moneda"]
+                    
+                    elif table_name == "Frecuencia":
+                        if "id_frecuencia" not in processed_record or processed_record["id_frecuencia"] is None:
+                            processed_record["id_frecuencia"] = entity_counters["id_frecuencia"]
+                            entity_counters["id_frecuencia"] += 1
+                        
+                        # Create lookup
+                        nombre_frecuencia = processed_record.get("nombre_frecuencia")
+                        if nombre_frecuencia:
+                            entity_lookups["frecuencia"][nombre_frecuencia] = processed_record["id_frecuencia"]
+                    
+                    elif table_name == "Tipo_Informe":
+                        if "id_tipo_informe" not in processed_record or processed_record["id_tipo_informe"] is None:
+                            processed_record["id_tipo_informe"] = entity_counters["id_tipo_informe"]
+                            entity_counters["id_tipo_informe"] += 1
+                        
+                        # Create lookup
+                        nombre_tipo = processed_record.get("nombre_tipo_informe")
+                        if nombre_tipo:
+                            entity_lookups["tipo_informe"][nombre_tipo] = processed_record["id_tipo_informe"]
+                    
+                    elif table_name == "Periodo_Informe":
+                        if "id_periodo" not in processed_record or processed_record["id_periodo"] is None:
+                            processed_record["id_periodo"] = entity_counters["id_periodo"]
+                            entity_counters["id_periodo"] += 1
+                        
+                        # Create lookup
+                        nombre_periodo = processed_record.get("nombre_periodo")
+                        if nombre_periodo:
+                            entity_lookups["periodo"][nombre_periodo] = processed_record["id_periodo"]
+                    
+                    elif table_name == "Unidad_Medida":
+                        if "id_unidad_medida" not in processed_record or processed_record["id_unidad_medida"] is None:
+                            processed_record["id_unidad_medida"] = entity_counters["id_unidad_medida"]
+                            entity_counters["id_unidad_medida"] += 1
+                        
+                        # Create lookup
+                        simbolo = processed_record.get("simbolo")
+                        if simbolo:
+                            entity_lookups["unidad_medida"][simbolo] = processed_record["id_unidad_medida"]
+                    
+                    elif table_name == "Instrumento":
+                        if "id_instrumento" not in processed_record or processed_record["id_instrumento"] is None:
+                            processed_record["id_instrumento"] = entity_counters["id_instrumento"]
+                            entity_counters["id_instrumento"] += 1
+                        
+                        # Create lookup
+                        simbolo_instrumento = processed_record.get("simbolo_instrumento")
+                        if simbolo_instrumento:
+                            entity_lookups["instrumento"][simbolo_instrumento] = processed_record["id_instrumento"]
+                    
+                    relationship_report["data_with_relationships"][table_name].append(processed_record)
+                    relationship_report["report"]["processed_records"] += 1
+                    table_report["processed"] += 1
+                    table_report["entities_created"] += 1
+                
+                relationship_report["report"]["tables_processed"].append(table_report)
+            
+            # Process dependent entities that reference master entities
+            dependent_entities = ["Informe_General", "Resumen_Informe_Financiero", "Dato_Macroeconomico", "Movimiento_Diario_Bolsa", "Licitacion_Contrato"]
+            
+            for table_name in dependent_entities:
+                if table_name not in valid_data:
+                    continue
+                
+                relationship_report["data_with_relationships"][table_name] = []
+                records = valid_data[table_name]
+                
+                table_report = {
+                    "table": table_name,
+                    "total": len(records),
+                    "processed": 0,
+                    "relationship_errors": []
+                }
+                
+                for record in records:
+                    relationship_report["report"]["total_records"] += 1
+                    processed_record = record.copy()
+                    
+                    # Assign primary key ID
+                    if table_name == "Informe_General":
+                        if "id_informe" not in processed_record or processed_record["id_informe"] is None:
+                            processed_record["id_informe"] = entity_counters["id_informe"]
+                            entity_counters["id_informe"] += 1
+                        
+                        # Resolve foreign key relationships
+                        if "nombre_emisor" in processed_record:
+                            emisor_name = processed_record["nombre_emisor"]
+                            if emisor_name in entity_lookups["emisor"]:
+                                processed_record["id_emisor"] = entity_lookups["emisor"][emisor_name]
+                    
+                    elif table_name == "Resumen_Informe_Financiero":
+                        if "id_resumen_financiero" not in processed_record or processed_record["id_resumen_financiero"] is None:
+                            processed_record["id_resumen_financiero"] = entity_counters["id_resumen_financiero"]
+                            entity_counters["id_resumen_financiero"] += 1
+                    
+                    elif table_name == "Dato_Macroeconomico":
+                        if "id_dato_macro" not in processed_record or processed_record["id_dato_macro"] is None:
+                            processed_record["id_dato_macro"] = entity_counters["id_dato_macro"]
+                            entity_counters["id_dato_macro"] += 1
+                    
+                    elif table_name == "Movimiento_Diario_Bolsa":
+                        if "id_operacion" not in processed_record or processed_record["id_operacion"] is None:
+                            processed_record["id_operacion"] = entity_counters["id_operacion"]
+                            entity_counters["id_operacion"] += 1
+                    
+                    elif table_name == "Licitacion_Contrato":
+                        if "id_licitacion_contrato" not in processed_record or processed_record["id_licitacion_contrato"] is None:
+                            processed_record["id_licitacion_contrato"] = entity_counters["id_licitacion_contrato"]
+                            entity_counters["id_licitacion_contrato"] += 1
+                    
+                    relationship_report["data_with_relationships"][table_name].append(processed_record)
+                    relationship_report["report"]["processed_records"] += 1
+                    table_report["processed"] += 1
+                
+                relationship_report["report"]["tables_processed"].append(table_report)
+            
+            # Store entity lookups for reference
+            relationship_report["created_entities"] = entity_lookups
+            relationship_report["report"]["created_master_entities"] = {
+                key: len(value) for key, value in entity_lookups.items()
+            }
+            
+            return relationship_report
+            
+        except Exception as e:
+            return {"error": f"Error creating entity relationships: {str(e)}", "validated_data": validated_data}
+
+    @tool("Structure Extracted Data Tool")
+    def structure_extracted_data(relationship_data: dict) -> dict:
+        """Structure data with relationships into final format for loading.
+        
+        Args:
+            relationship_data: Dictionary with data from create_entity_relationships tool
+            
+        Returns:
+            Dictionary with structured data ready for database loading
+        """
+        try:
+            structured_report = {
+                "structured_data": {},
+                "metadata": {
+                    "total_tables": 0,
+                    "total_records": 0,
+                    "loading_batches": {},
+                    "table_priorities": [],
+                    "processing_summary": []
+                },
+                "report": {
+                    "tables_structured": 0,
+                    "records_structured": 0,
+                    "empty_tables": [],
+                    "processing_errors": []
+                }
+            }
+            
+            # Get data with relationships
+            data_with_relationships = relationship_data.get("data_with_relationships", {})
+            
+            if not data_with_relationships:
+                return {"error": "No data with relationships found", "relationship_data": relationship_data}
+            
+            # Define loading priority order (master entities first, then dependent entities)
+            loading_priority = [
+                # Master entities (no foreign keys dependencies)
+                "Categoria_Emisor",
+                "Moneda", 
+                "Frecuencia",
+                "Tipo_Informe",
+                "Periodo_Informe",
+                "Unidad_Medida",
+                "Instrumento",
+                
+                # Entities with minimal dependencies
+                "Emisores",  # depends on Categoria_Emisor
+                
+                # Main content entities
+                "Informe_General",  # depends on Emisores, Tipo_Informe, Frecuencia, Periodo_Informe
+                
+                # Dependent entities
+                "Resumen_Informe_Financiero",  # depends on Informe_General, Emisores
+                "Dato_Macroeconomico",  # depends on Informe_General, Emisores, Frecuencia, Unidad_Medida, Moneda
+                "Movimiento_Diario_Bolsa",  # depends on Instrumento, Emisores, Moneda
+                "Licitacion_Contrato"  # depends on Emisores, Moneda
+            ]
+            
+            structured_report["metadata"]["table_priorities"] = loading_priority
+            
+            # Process each table according to priority
+            for table_name in loading_priority:
+                if table_name not in data_with_relationships:
+                    structured_report["report"]["empty_tables"].append(table_name)
+                    continue
+                
+                records = data_with_relationships[table_name]
+                
+                if not records:
+                    structured_report["report"]["empty_tables"].append(table_name)
+                    continue
+                
+                # Structure the data for this table
+                structured_records = []
+                table_processing_summary = {
+                    "table": table_name,
+                    "total_records": len(records),
+                    "structured_records": 0,
+                    "batch_size_recommended": 50 if len(records) > 100 else len(records),
+                    "fields_present": set(),
+                    "processing_notes": []
+                }
+                
+                for record in records:
+                    try:
+                        # Clean and structure each record
+                        structured_record = {}
+                        
+                        # Copy all fields, ensuring proper data types
+                        for field, value in record.items():
+                            if value is None or value == "":
+                                structured_record[field] = None
+                            else:
+                                structured_record[field] = value
+                            
+                            table_processing_summary["fields_present"].add(field)
+                        
+                        # Apply table-specific structuring rules
+                        if table_name == "Informe_General":
+                            # Ensure required fields are present
+                            if "titulo_informe" not in structured_record:
+                                table_processing_summary["processing_notes"].append("Missing titulo_informe in record")
+                                continue
+                            if "fecha_publicacion" not in structured_record:
+                                table_processing_summary["processing_notes"].append("Missing fecha_publicacion in record")
+                                continue
+                        
+                        elif table_name == "Emisores":
+                            # Ensure required fields are present
+                            if "nombre_emisor" not in structured_record:
+                                table_processing_summary["processing_notes"].append("Missing nombre_emisor in record")
+                                continue
+                        
+                        elif table_name == "Dato_Macroeconomico":
+                            # Ensure required fields are present
+                            required_fields = ["indicador_nombre", "fecha_dato", "valor_numerico"]
+                            missing_fields = [field for field in required_fields if field not in structured_record]
+                            if missing_fields:
+                                table_processing_summary["processing_notes"].append(f"Missing required fields: {missing_fields}")
+                                continue
+                            
+                            # Ensure valor_numerico is numeric
+                            if not isinstance(structured_record["valor_numerico"], (int, float)):
+                                try:
+                                    structured_record["valor_numerico"] = float(structured_record["valor_numerico"])
+                                except:
+                                    table_processing_summary["processing_notes"].append("Invalid valor_numerico format")
+                                    continue
+                        
+                        elif table_name == "Movimiento_Diario_Bolsa":
+                            # Ensure required fields are present
+                            required_fields = ["fecha_operacion", "id_instrumento", "precio_operacion"]
+                            missing_fields = [field for field in required_fields if field not in structured_record]
+                            if missing_fields:
+                                table_processing_summary["processing_notes"].append(f"Missing required fields: {missing_fields}")
+                                continue
+                        
+                        elif table_name == "Licitacion_Contrato":
+                            # Ensure required fields are present
+                            if "titulo" not in structured_record:
+                                table_processing_summary["processing_notes"].append("Missing titulo in record")
+                                continue
+                        
+                        structured_records.append(structured_record)
+                        table_processing_summary["structured_records"] += 1
+                        structured_report["report"]["records_structured"] += 1
+                        
+                    except Exception as record_error:
+                        structured_report["report"]["processing_errors"].append({
+                            "table": table_name,
+                            "record_index": len(structured_records),
+                            "error": str(record_error)
+                        })
+                
+                # Store structured data for this table
+                if structured_records:
+                    structured_report["structured_data"][table_name] = structured_records
+                    structured_report["metadata"]["total_records"] += len(structured_records)
+                    
+                    # Calculate optimal batch size for loading
+                    if len(structured_records) > 200:
+                        batch_size = 50
+                    elif len(structured_records) > 50:
+                        batch_size = 25
+                    else:
+                        batch_size = len(structured_records)
+                    
+                    structured_report["metadata"]["loading_batches"][table_name] = {
+                        "total_records": len(structured_records),
+                        "recommended_batch_size": batch_size,
+                        "estimated_batches": (len(structured_records) + batch_size - 1) // batch_size
+                    }
+                
+                # Convert set to list for JSON serialization
+                table_processing_summary["fields_present"] = list(table_processing_summary["fields_present"])
+                structured_report["metadata"]["processing_summary"].append(table_processing_summary)
+                structured_report["report"]["tables_structured"] += 1
+            
+            structured_report["metadata"]["total_tables"] = len(structured_report["structured_data"])
+            
+            # Add loading recommendations
+            structured_report["loading_recommendations"] = {
+                "load_order": [table for table in loading_priority if table in structured_report["structured_data"]],
+                "parallel_loading_groups": [
+                    ["Categoria_Emisor", "Moneda", "Frecuencia", "Tipo_Informe", "Periodo_Informe", "Unidad_Medida", "Instrumento"],
+                    ["Emisores"],
+                    ["Informe_General"], 
+                    ["Resumen_Informe_Financiero", "Dato_Macroeconomico", "Movimiento_Diario_Bolsa", "Licitacion_Contrato"]
+                ],
+                "estimated_loading_time": f"{structured_report['metadata']['total_records'] / 100:.1f} minutes",
+                "database_validation_required": True
+            }
+            
+            return structured_report
+            
+        except Exception as e:
+            return {"error": f"Error structuring extracted data: {str(e)}", "relationship_data": relationship_data}
+
     @tool("Filter Duplicate Data Tool")
     def filter_duplicate_data(structured_data:dict) -> dict:
         """Filter out data that already exists in Supabase
@@ -1371,6 +2407,476 @@ class InverbotPipelineDato():
             return {"error": f"Error filtering duplicate data : {str(e)}", "structured_data": structured_data}
         
     
+    @tool("Extract Text from PDF Tool")
+    def extract_text_from_pdf(pdf_url: str) -> dict:
+        """Extract text content from PDF documents.
+        
+        Args:
+            pdf_url: URL or file path to the PDF document
+            
+        Returns:
+            Dictionary with extracted text and metadata
+        """
+        try:
+            import requests
+            import io
+            
+            # Try to import PyMuPDF (fitz)
+            try:
+                import fitz
+            except ImportError:
+                return {"error": "PyMuPDF (fitz) not installed. Please install with: pip install PyMuPDF"}
+            
+            extraction_result = {
+                "extracted_text": "",
+                "metadata": {
+                    "source_url": pdf_url,
+                    "page_count": 0,
+                    "extraction_method": "PyMuPDF",
+                    "file_size_kb": 0,
+                    "extraction_errors": []
+                },
+                "pages": [],
+                "report": {
+                    "success": False,
+                    "total_characters": 0,
+                    "pages_processed": 0,
+                    "pages_with_text": 0,
+                    "processing_time": 0
+                }
+            }
+            
+            import time
+            start_time = time.time()
+            
+            # Download PDF if it's a URL
+            pdf_data = None
+            if pdf_url.startswith(('http://', 'https://')):
+                try:
+                    response = requests.get(pdf_url, timeout=30)
+                    response.raise_for_status()
+                    pdf_data = response.content
+                    extraction_result["metadata"]["file_size_kb"] = len(pdf_data) / 1024
+                except Exception as download_error:
+                    return {"error": f"Failed to download PDF from URL: {str(download_error)}", "pdf_url": pdf_url}
+            else:
+                try:
+                    with open(pdf_url, 'rb') as file:
+                        pdf_data = file.read()
+                        extraction_result["metadata"]["file_size_kb"] = len(pdf_data) / 1024
+                except Exception as file_error:
+                    return {"error": f"Failed to read PDF file: {str(file_error)}", "pdf_url": pdf_url}
+            
+            # Extract text using PyMuPDF
+            try:
+                # Open PDF from memory
+                pdf_document = fitz.open(stream=pdf_data, filetype="pdf")
+                extraction_result["metadata"]["page_count"] = pdf_document.page_count
+                
+                all_text = []
+                
+                for page_num in range(pdf_document.page_count):
+                    try:
+                        page = pdf_document.load_page(page_num)
+                        page_text = page.get_text()
+                        
+                        page_info = {
+                            "page_number": page_num + 1,
+                            "text": page_text.strip(),
+                            "character_count": len(page_text),
+                            "has_text": len(page_text.strip()) > 0
+                        }
+                        
+                        extraction_result["pages"].append(page_info)
+                        extraction_result["report"]["pages_processed"] += 1
+                        
+                        if page_info["has_text"]:
+                            all_text.append(page_text)
+                            extraction_result["report"]["pages_with_text"] += 1
+                        
+                    except Exception as page_error:
+                        extraction_result["metadata"]["extraction_errors"].append({
+                            "page": page_num + 1,
+                            "error": str(page_error)
+                        })
+                
+                pdf_document.close()
+                
+                # Combine all text
+                extraction_result["extracted_text"] = "\n\n".join(all_text)
+                extraction_result["report"]["total_characters"] = len(extraction_result["extracted_text"])
+                extraction_result["report"]["processing_time"] = time.time() - start_time
+                extraction_result["report"]["success"] = True
+                
+                # Add document metadata if available
+                try:
+                    pdf_document = fitz.open(stream=pdf_data, filetype="pdf")
+                    metadata = pdf_document.metadata
+                    extraction_result["metadata"].update({
+                        "title": metadata.get("title", ""),
+                        "author": metadata.get("author", ""), 
+                        "subject": metadata.get("subject", ""),
+                        "creator": metadata.get("creator", ""),
+                        "producer": metadata.get("producer", ""),
+                        "creation_date": metadata.get("creationDate", ""),
+                        "modification_date": metadata.get("modDate", "")
+                    })
+                    pdf_document.close()
+                except:
+                    pass  # Metadata extraction is optional
+                
+                return extraction_result
+                
+            except Exception as extraction_error:
+                return {"error": f"Failed to extract text from PDF: {str(extraction_error)}", "pdf_url": pdf_url}
+            
+        except Exception as e:
+            return {"error": f"Error in PDF text extraction: {str(e)}", "pdf_url": pdf_url}
+
+    @tool("Chunk Document Tool")
+    def chunk_document(text_content: str, chunk_size: int = 1200, overlap: int = 200) -> dict:
+        """Split document text into overlapping chunks for vectorization.
+        
+        Args:
+            text_content: Full text content to chunk
+            chunk_size: Target size of each chunk in tokens (default 1200)
+            overlap: Number of tokens to overlap between chunks (default 200)
+            
+        Returns:
+            Dictionary with list of text chunks and metadata
+        """
+        try:
+            # Try to import tiktoken for token counting
+            try:
+                import tiktoken
+                tokenizer = tiktoken.get_encoding("cl100k_base")  # GPT-4 tokenizer
+                use_tiktoken = True
+            except ImportError:
+                # Fallback to character-based chunking
+                use_tiktoken = False
+            
+            chunking_result = {
+                "chunks": [],
+                "metadata": {
+                    "total_chunks": 0,
+                    "chunk_size_target": chunk_size,
+                    "overlap_size": overlap,
+                    "tokenizer_used": "tiktoken" if use_tiktoken else "character_based",
+                    "original_length": len(text_content),
+                    "total_tokens_estimate": 0
+                },
+                "report": {
+                    "success": False,
+                    "chunks_created": 0,
+                    "average_chunk_size": 0,
+                    "chunks_with_overlap": 0,
+                    "processing_errors": []
+                }
+            }
+            
+            if not text_content or len(text_content.strip()) == 0:
+                return {"error": "Empty text content provided", "text_content": text_content}
+            
+            text_content = text_content.strip()
+            
+            if use_tiktoken:
+                # Token-based chunking
+                tokens = tokenizer.encode(text_content)
+                chunking_result["metadata"]["total_tokens_estimate"] = len(tokens)
+                
+                if len(tokens) <= chunk_size:
+                    # Text is small enough to be a single chunk
+                    chunking_result["chunks"].append({
+                        "chunk_id": 1,
+                        "text": text_content,
+                        "token_count": len(tokens),
+                        "character_count": len(text_content),
+                        "start_position": 0,
+                        "end_position": len(text_content),
+                        "has_overlap_with_previous": False,
+                        "has_overlap_with_next": False
+                    })
+                    chunking_result["report"]["chunks_created"] = 1
+                else:
+                    # Split into multiple chunks
+                    chunk_id = 1
+                    start_idx = 0
+                    
+                    while start_idx < len(tokens):
+                        end_idx = min(start_idx + chunk_size, len(tokens))
+                        chunk_tokens = tokens[start_idx:end_idx]
+                        chunk_text = tokenizer.decode(chunk_tokens)
+                        
+                        # Find actual character positions in original text
+                        if chunk_id == 1:
+                            char_start = 0
+                        else:
+                            # Find the character position by decoding from beginning
+                            preceding_tokens = tokens[:start_idx]
+                            char_start = len(tokenizer.decode(preceding_tokens))
+                        
+                        char_end = min(char_start + len(chunk_text), len(text_content))
+                        actual_chunk_text = text_content[char_start:char_end]
+                        
+                        chunk = {
+                            "chunk_id": chunk_id,
+                            "text": actual_chunk_text,
+                            "token_count": len(chunk_tokens),
+                            "character_count": len(actual_chunk_text),
+                            "start_position": char_start,
+                            "end_position": char_end,
+                            "has_overlap_with_previous": chunk_id > 1,
+                            "has_overlap_with_next": end_idx < len(tokens)
+                        }
+                        
+                        chunking_result["chunks"].append(chunk)
+                        chunking_result["report"]["chunks_created"] += 1
+                        
+                        if chunk["has_overlap_with_previous"]:
+                            chunking_result["report"]["chunks_with_overlap"] += 1
+                        
+                        chunk_id += 1
+                        
+                        # Move start position with overlap
+                        if end_idx < len(tokens):
+                            start_idx = end_idx - overlap
+                        else:
+                            break
+            
+            else:
+                # Character-based chunking (fallback)
+                # Estimate tokens as characters / 4 (rough approximation)
+                char_chunk_size = chunk_size * 4
+                char_overlap = overlap * 4
+                
+                chunking_result["metadata"]["total_tokens_estimate"] = len(text_content) // 4
+                
+                if len(text_content) <= char_chunk_size:
+                    chunking_result["chunks"].append({
+                        "chunk_id": 1,
+                        "text": text_content,
+                        "token_count": len(text_content) // 4,
+                        "character_count": len(text_content),
+                        "start_position": 0,
+                        "end_position": len(text_content),
+                        "has_overlap_with_previous": False,
+                        "has_overlap_with_next": False
+                    })
+                    chunking_result["report"]["chunks_created"] = 1
+                else:
+                    chunk_id = 1
+                    start_pos = 0
+                    
+                    while start_pos < len(text_content):
+                        end_pos = min(start_pos + char_chunk_size, len(text_content))
+                        
+                        # Try to break at sentence or paragraph boundaries
+                        if end_pos < len(text_content):
+                            # Look for sentence endings within the last 200 characters
+                            search_start = max(end_pos - 200, start_pos)
+                            sentence_endings = []
+                            for i in range(search_start, end_pos):
+                                if text_content[i] in '.!?\n':
+                                    sentence_endings.append(i)
+                            
+                            if sentence_endings:
+                                end_pos = sentence_endings[-1] + 1
+                        
+                        chunk_text = text_content[start_pos:end_pos].strip()
+                        
+                        if chunk_text:
+                            chunk = {
+                                "chunk_id": chunk_id,
+                                "text": chunk_text,
+                                "token_count": len(chunk_text) // 4,
+                                "character_count": len(chunk_text),
+                                "start_position": start_pos,
+                                "end_position": end_pos,
+                                "has_overlap_with_previous": chunk_id > 1,
+                                "has_overlap_with_next": end_pos < len(text_content)
+                            }
+                            
+                            chunking_result["chunks"].append(chunk)
+                            chunking_result["report"]["chunks_created"] += 1
+                            
+                            if chunk["has_overlap_with_previous"]:
+                                chunking_result["report"]["chunks_with_overlap"] += 1
+                            
+                            chunk_id += 1
+                        
+                        # Move start with overlap
+                        if end_pos < len(text_content):
+                            start_pos = max(end_pos - char_overlap, start_pos + 1)
+                        else:
+                            break
+            
+            # Calculate final statistics
+            chunking_result["metadata"]["total_chunks"] = len(chunking_result["chunks"])
+            if chunking_result["chunks"]:
+                total_chars = sum(chunk["character_count"] for chunk in chunking_result["chunks"])
+                chunking_result["report"]["average_chunk_size"] = total_chars // len(chunking_result["chunks"])
+            
+            chunking_result["report"]["success"] = True
+            
+            return chunking_result
+            
+        except Exception as e:
+            return {"error": f"Error chunking document: {str(e)}", "text_content": text_content[:500] + "..."}
+
+    @tool("Prepare Document Metadata Tool")
+    def prepare_document_metadata(chunks_data: dict, source_info: dict, index_name: str) -> dict:
+        """Prepare metadata for Pinecone vector storage.
+        
+        Args:
+            chunks_data: Dictionary with chunks from chunk_document tool
+            source_info: Dictionary with source document information  
+            index_name: Target Pinecone index name
+            
+        Returns:
+            Dictionary with vector-ready data including metadata
+        """
+        try:
+            import uuid
+            from datetime import datetime
+            
+            metadata_result = {
+                "vector_data": [],
+                "metadata": {
+                    "index_name": index_name,
+                    "source_document": source_info,
+                    "total_vectors": 0,
+                    "metadata_schema": {},
+                    "processing_timestamp": datetime.now().isoformat()
+                },
+                "report": {
+                    "success": False,
+                    "vectors_prepared": 0,
+                    "metadata_errors": [],
+                    "skipped_chunks": 0
+                }
+            }
+            
+            # Get chunks from input
+            chunks = chunks_data.get("chunks", [])
+            if not chunks:
+                return {"error": "No chunks found in chunks_data", "chunks_data": chunks_data}
+            
+            # Define metadata schema based on index type
+            index_schemas = {
+                "documentos-informes-vector": {
+                    "required_fields": ["id_informe", "chunk_id"],
+                    "optional_fields": ["id_emisor", "id_tipo_informe", "id_frecuencia", "id_periodo", "fecha_publicacion", "chunk_text"]
+                },
+                "dato-macroeconomico-vector": {
+                    "required_fields": ["id_dato_macro", "chunk_id"],
+                    "optional_fields": ["indicador_nombre", "fecha_dato", "id_unidad_medida", "id_moneda", "id_frecuencia", "id_emisor", "id_informe", "chunk_text"]
+                },
+                "licitacion-contrato-vector": {
+                    "required_fields": ["id_licitacion_contrato", "chunk_id"],
+                    "optional_fields": ["titulo", "id_emisor_adjudicado", "entidad_convocante", "monto_adjudicado", "id_moneda", "fecha_adjudicacion", "chunk_text"]
+                }
+            }
+            
+            if index_name not in index_schemas:
+                return {"error": f"Unknown index schema for {index_name}", "index_name": index_name}
+            
+            schema = index_schemas[index_name]
+            metadata_result["metadata"]["metadata_schema"] = schema
+            
+            # Process each chunk into vector format
+            for chunk in chunks:
+                try:
+                    chunk_text = chunk.get("text", "")
+                    if not chunk_text or len(chunk_text.strip()) < 10:
+                        metadata_result["report"]["skipped_chunks"] += 1
+                        continue
+                    
+                    # Generate unique vector ID
+                    vector_id = str(uuid.uuid4())
+                    
+                    # Base metadata that applies to all indices
+                    base_metadata = {
+                        "chunk_id": chunk.get("chunk_id", 1),
+                        "chunk_text": chunk_text[:500],  # Truncate for metadata storage
+                        "character_count": chunk.get("character_count", len(chunk_text)),
+                        "token_count": chunk.get("token_count", len(chunk_text) // 4),
+                        "chunk_position": {
+                            "start": chunk.get("start_position", 0),
+                            "end": chunk.get("end_position", len(chunk_text))
+                        },
+                        "processing_timestamp": metadata_result["metadata"]["processing_timestamp"],
+                        "source_type": source_info.get("type", "document")
+                    }
+                    
+                    # Add source-specific metadata
+                    source_metadata = {}
+                    
+                    if index_name == "documentos-informes-vector":
+                        source_metadata = {
+                            "id_informe": source_info.get("id_informe", 1),
+                            "id_emisor": source_info.get("id_emisor"),
+                            "id_tipo_informe": source_info.get("id_tipo_informe"),
+                            "id_frecuencia": source_info.get("id_frecuencia"),
+                            "id_periodo": source_info.get("id_periodo"),
+                            "fecha_publicacion": source_info.get("fecha_publicacion"),
+                            "titulo_informe": source_info.get("titulo_informe", "")[:100],
+                            "url_original": source_info.get("url_descarga_original", "")
+                        }
+                    
+                    elif index_name == "dato-macroeconomico-vector":
+                        source_metadata = {
+                            "id_dato_macro": source_info.get("id_dato_macro", 1),
+                            "indicador_nombre": source_info.get("indicador_nombre", "")[:100],
+                            "fecha_dato": source_info.get("fecha_dato"),
+                            "id_unidad_medida": source_info.get("id_unidad_medida"),
+                            "id_moneda": source_info.get("id_moneda"),
+                            "id_frecuencia": source_info.get("id_frecuencia"),
+                            "id_emisor": source_info.get("id_emisor"),
+                            "id_informe": source_info.get("id_informe"),
+                            "valor_numerico": source_info.get("valor_numerico")
+                        }
+                    
+                    elif index_name == "licitacion-contrato-vector":
+                        source_metadata = {
+                            "id_licitacion_contrato": source_info.get("id_licitacion_contrato", 1),
+                            "titulo": source_info.get("titulo", "")[:100],
+                            "id_emisor_adjudicado": source_info.get("id_emisor_adjudicado"),
+                            "entidad_convocante": source_info.get("entidad_convocante", "")[:100],
+                            "monto_adjudicado": source_info.get("monto_adjudicado"),
+                            "id_moneda": source_info.get("id_moneda"),
+                            "fecha_adjudicacion": source_info.get("fecha_adjudicacion")
+                        }
+                    
+                    # Combine all metadata
+                    full_metadata = {**base_metadata, **source_metadata}
+                    
+                    # Remove None values
+                    full_metadata = {k: v for k, v in full_metadata.items() if v is not None}
+                    
+                    # Create vector data entry
+                    vector_entry = {
+                        "id": vector_id,
+                        "text": chunk_text,
+                        "metadata": full_metadata
+                    }
+                    
+                    metadata_result["vector_data"].append(vector_entry)
+                    metadata_result["report"]["vectors_prepared"] += 1
+                    
+                except Exception as chunk_error:
+                    metadata_result["report"]["metadata_errors"].append({
+                        "chunk_id": chunk.get("chunk_id", "unknown"),
+                        "error": str(chunk_error)
+                    })
+            
+            metadata_result["metadata"]["total_vectors"] = len(metadata_result["vector_data"])
+            metadata_result["report"]["success"] = True
+            
+            return metadata_result
+            
+        except Exception as e:
+            return {"error": f"Error preparing document metadata: {str(e)}", "chunks_data": chunks_data}
+
     @tool("Filter Duplicate Vectors Tool")
     def filter_duplicate_vectors(vector_data: list, index_name: str) -> dict:
         """Filter out vector data that already exists in Pinecone.
@@ -1473,24 +2979,71 @@ class InverbotPipelineDato():
     
     
     @tool("Supabase Data Loading Tool")
-    def load_data_to_supabase(table_name: str, data: list) -> str:
-        """Load structured data into a Supabase table.
+    def load_data_to_supabase(table_name: str, data: list, test_mode: bool = None) -> str:
+        """Load structured data into a Supabase table or save to file in test mode.
         
         Args:
             table_name: Name of the table to load data into
             data: List of records to insert
+            test_mode: If True, save to file instead of loading to database
             
         Returns:
             Loading report as JSON string
         """
+        # Use class test_mode if not specified
+        if test_mode is None:
+            test_mode = self.test_mode
+            
+        if not data:
+            return json.dumps({"error": "No data provided to load"})
+        
+        # TEST MODE: Save to markdown file instead of database
+        if test_mode:
+            try:
+                os.makedirs("output/test_results", exist_ok=True)
+                
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"output/test_results/supabase_{table_name}_{timestamp}.md"
+                
+                with open(filename, 'w', encoding='utf-8') as f:
+                    f.write(f"# Supabase Test Mode Output - {table_name}\n\n")
+                    f.write(f"**Timestamp**: {datetime.datetime.now().isoformat()}\n")
+                    f.write(f"**Table**: {table_name}\n")
+                    f.write(f"**Records Count**: {len(data)}\n\n")
+                    f.write("## Data Preview (First 5 Records)\n\n")
+                    
+                    for i, record in enumerate(data[:5]):
+                        f.write(f"### Record {i+1}\n")
+                        f.write("```json\n")
+                        f.write(json.dumps(record, indent=2, ensure_ascii=False, default=str))
+                        f.write("\n```\n\n")
+                        
+                    if len(data) > 5:
+                        f.write(f"... and {len(data) - 5} more records\n\n")
+                    
+                    f.write("## Complete Data\n\n")
+                    f.write("```json\n")
+                    f.write(json.dumps(data, indent=2, ensure_ascii=False, default=str))
+                    f.write("\n```\n")
+                
+                return json.dumps({
+                    "status": "success",
+                    "mode": "TEST_MODE",
+                    "table_name": table_name,
+                    "records_processed": len(data),
+                    "output_file": filename,
+                    "message": f"Test mode: Data saved to {filename} instead of loading to Supabase"
+                }, indent=2)
+                
+            except Exception as e:
+                return json.dumps({"error": f"Test mode file save failed: {str(e)}"})
+        
+        # PRODUCTION MODE: Actual database loading
         supabase_url = os.getenv("SUPABASE_URL")
         supabase_key = os.getenv("SUPABASE_KEY")
         
         if not supabase_url or not supabase_key:
             return json.dumps({"error": "Supabase credentials not found in environment variables"})
-        
-        if not data:
-            return json.dumps({"error": "No data provided to load"})
         
         try:
             # Initialize Supabase client - FIX: usar supabase_key en lugar de supabase_url
@@ -1552,16 +3105,74 @@ class InverbotPipelineDato():
 
 
     @tool("Pinecone Vector Loading Tool")
-    def load_vectors_to_pinecone(index_name: str, vector_data: list) -> str:
-        """Generate embeddings and load vector data into Pinecone.
+    def load_vectors_to_pinecone(index_name: str, vector_data: list, test_mode: bool = None) -> str:
+        """Generate embeddings and load vector data into Pinecone or save to file in test mode.
         
         Args:
             index_name: Name of the Pinecone index
             vector_data: List of prepared vector data entries with 'text', 'id', 'metadata'
+            test_mode: If True, save to file instead of loading to database
             
         Returns:
             Loading report as JSON string
         """
+        # Use class test_mode if not specified
+        if test_mode is None:
+            test_mode = self.test_mode
+            
+        if not vector_data:
+            return json.dumps({"error": "No vector data provided to load"})
+        
+        # TEST MODE: Save to markdown file instead of database
+        if test_mode:
+            try:
+                os.makedirs("output/test_results", exist_ok=True)
+                
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"output/test_results/pinecone_{index_name}_{timestamp}.md"
+                
+                with open(filename, 'w', encoding='utf-8') as f:
+                    f.write(f"# Pinecone Test Mode Output - {index_name}\n\n")
+                    f.write(f"**Timestamp**: {datetime.datetime.now().isoformat()}\n")
+                    f.write(f"**Index**: {index_name}\n")
+                    f.write(f"**Vector Count**: {len(vector_data)}\n\n")
+                    f.write("## Vector Data Preview (First 3 Vectors)\n\n")
+                    
+                    for i, vector in enumerate(vector_data[:3]):
+                        f.write(f"### Vector {i+1}\n")
+                        f.write(f"**ID**: `{vector.get('id', 'N/A')}`\n\n")
+                        f.write(f"**Text Preview**: {vector.get('text', 'N/A')[:200]}...\n\n")
+                        f.write("**Metadata**:\n")
+                        f.write("```json\n")
+                        f.write(json.dumps(vector.get('metadata', {}), indent=2, ensure_ascii=False, default=str))
+                        f.write("\n```\n\n")
+                        f.write("**Full Text Content**:\n")
+                        f.write("```\n")
+                        f.write(vector.get('text', 'N/A'))
+                        f.write("\n```\n\n")
+                        f.write("---\n\n")
+                        
+                    if len(vector_data) > 3:
+                        f.write(f"... and {len(vector_data) - 3} more vectors\n\n")
+                    
+                    f.write("## Complete Vector Data\n\n")
+                    f.write("```json\n")
+                    f.write(json.dumps(vector_data, indent=2, ensure_ascii=False, default=str))
+                    f.write("\n```\n")
+                
+                return json.dumps({
+                    "status": "success",
+                    "mode": "TEST_MODE", 
+                    "index_name": index_name,
+                    "vectors_processed": len(vector_data),
+                    "output_file": filename,
+                    "message": f"Test mode: Vector data saved to {filename} instead of loading to Pinecone"
+                }, indent=2)
+                
+            except Exception as e:
+                return json.dumps({"error": f"Test mode file save failed: {str(e)}"})
+        
+        # PRODUCTION MODE: Actual vector loading
         pinecone_api_key = os.getenv("PINECONE_API_KEY")
         gemini_api_key = os.getenv("GEMINI_API_KEY")  
         
@@ -1570,9 +3181,6 @@ class InverbotPipelineDato():
         
         if not gemini_api_key:  # Cambio aquí
             return json.dumps({"error": "Gemini API key not found in environment variables"})
-        
-        if not vector_data:
-            return json.dumps({"error": "No vector data provided to load"})
         
         try:
             # Initialize Pinecone y Gemini
@@ -1903,6 +3511,10 @@ class InverbotPipelineDato():
             verbose=True,
             llm=self.model_llm,
             tools=[
+                self.normalize_data,
+                self.validate_data,
+                self.create_entity_relationships,
+                self.structure_extracted_data,
                 self.filter_duplicate_data,
             ]
         )
@@ -1914,7 +3526,10 @@ class InverbotPipelineDato():
             verbose=True,
             llm=self.model_llm,
             tools=[
-                self.filter_duplicate_data
+                self.extract_text_from_pdf,
+                self.chunk_document,
+                self.prepare_document_metadata,
+                self.filter_duplicate_vectors
             ]
         )
 
@@ -1963,8 +3578,13 @@ class InverbotPipelineDato():
         
     @crew
     def crew(self) -> Crew:
-        """Creates the InverbotPipelineDato crew"""
-
+        """Creates the InverbotPipelineDato crew with performance tracking"""
+        
+        # Initialize performance tracking
+        self.performance_metrics["pipeline_start_time"] = datetime.datetime.now().timestamp()
+        self.log_performance("InverBot Pipeline Starting")
+        self.log_performance(f"Test Mode: {'ENABLED' if self.test_mode else 'DISABLED'}")
+        
         return Crew(
             agents=self.agents, 
             tasks=self.tasks, 
@@ -1972,3 +3592,32 @@ class InverbotPipelineDato():
             verbose=True,
             max_rpm=30
         )
+    
+    def kickoff_with_tracking(self):
+        """Execute the crew with performance tracking"""
+        try:
+            self.log_performance("Starting pipeline execution...")
+            
+            # Get the crew and execute it
+            crew_instance = self.crew()
+            result = crew_instance.kickoff()
+            
+            # Pipeline completed successfully
+            self.performance_metrics["pipeline_end_time"] = datetime.datetime.now().timestamp()
+            self.log_performance("Pipeline completed successfully!")
+            
+            # Generate performance report
+            report_file = self.generate_performance_report()
+            self.log_performance(f"Performance report generated: {report_file}")
+            
+            return result
+            
+        except Exception as e:
+            self.performance_metrics["pipeline_end_time"] = datetime.datetime.now().timestamp()
+            self.log_performance(f"Pipeline failed: {str(e)}", "ERROR")
+            
+            # Generate performance report even on failure
+            report_file = self.generate_performance_report()
+            self.log_performance(f"Performance report generated: {report_file}")
+            
+            raise e
