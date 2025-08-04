@@ -1,14 +1,16 @@
 # CLAUDE.md - InverBot Project Context
 ## IMPORTANT: 
-1. **ALWAYS** read CHATLOG.md, CLAUDE.md, and TASKS.md before starting work
-2. **ALWAYS** update these files after completing significant work
-3. **Follow existing code patterns** and architectural decisions documented here
-4. **Use established terminology** and maintain consistent documentation style
-5. **Mark task status** using: ✅ (complete), 🔄 (in progress), ⏳ (pending)
-6. **CRITICAL**: Make all features **easily verifiable by a human** - include clear instructions for testing functionality
-7. **NEVER overwrite or modify content written by other agents** - Only append new sections or update your own previous work to preserve collaboration history
-8. **ALWAYS** make sure to save all user prompts and actions taken in a file named "CHATLOG.md" inside the claude folder (create file if not found) to facilitate different Coding Agents quick context understanding.
-9. **ALWAYS** plan your tasks first before executing anything, manage task's status, task's dependencies on other tasks and task descriptions in a filed named "TASKS.md" inside the claude folder (create file if not found).
+1. **ALWAYS** make sure to save all user prompts and actions taken in a file named "CHATLOG.md" inside the claude folder (create file if not found) to facilitate different Coding Agents quick context understanding.
+2. **ALWAYS** plan your tasks first before executing anything, manage task's status, task's dependencies on other tasks and task descriptions in a filed named "TASKS.md" inside the claude folder (create file if not found).
+3. **ALWAYS** read CHATLOG.md, CLAUDE.md, and TASKS.md before starting work, these are your "context files"
+4. **ALWAYS** update your context files after completing significant work 
+5. **Follow existing code patterns** and architectural decisions documented here
+6. **Use established terminology** and maintain consistent documentation style
+7. **Mark task status** using: ✅ (complete), 🔄 (in progress), ⏳ (pending)
+8. **CRITICAL**: Make all features **easily verifiable by a human** - include clear instructions for testing functionality
+9. **ALWAYS** identify yourself with your model name and date you're working on the project on before interacting with CLAUDE.md, TASKS.md or CHATLOG.md 
+10. **NEVER overwrite or modify content written by other agents** - Only append new sections or update your own previous work to preserve collaboration history
+
 
 
 ## Proyecto Overview
