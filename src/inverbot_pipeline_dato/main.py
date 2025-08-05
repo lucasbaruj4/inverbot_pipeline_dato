@@ -3,6 +3,13 @@ import sys
 import warnings
 import os
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Set UTF-8 encoding for Windows console
+if sys.platform == "win32":
+    import codecs
+    sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
+    sys.stderr = codecs.getwriter("utf-8")(sys.stderr.detach())
 
 from inverbot_pipeline_dato.crew import InverbotPipelineDato
 
@@ -13,6 +20,16 @@ def run():
     """
     Run the InverBot ETL Pipeline with comprehensive tracking and test mode support.
     """
+    # Load environment variables from .env.local or .env
+    if os.path.exists(".env.local"):
+        load_dotenv(".env.local")
+        print("Loaded environment variables from .env.local")
+    elif os.path.exists(".env"):
+        load_dotenv(".env")
+        print("Loaded environment variables from .env")
+    else:
+        print("Warning: No .env or .env.local file found")
+    
     print("=" * 60)
     print("INVERBOT ETL PIPELINE - Starting Execution")
     print("=" * 60)

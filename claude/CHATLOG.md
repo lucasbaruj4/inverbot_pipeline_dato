@@ -486,3 +486,186 @@ The InverBot ETL pipeline has achieved:
 **Next Phase**: Real data extraction from Paraguayan financial sources
 
 ---
+
+## 2025-08-05 - Environment Variable Loading & Firecrawl API Fix Session
+
+### User Request
+User reported inability to kick off crew in test mode due to environment variable errors, specifically mentioning .env file name (.env.local vs .env) as potential issue.
+
+### Problem Analysis Phase
+1. ✅ **Environment Variable Loading Issue**: No python-dotenv dependency and no load_dotenv() calls
+2. ✅ **File Location**: User had .env.local file with correct API keys but not being loaded
+3. ✅ **Import Order Problem**: crew.py imported before main.py could load environment variables
+4. ❌ **Firecrawl API Issues**: JSON schema validation errors and Response object attribute errors
+
+### Resolution Phase - Environment Variables
+
+#### ✅ Python-dotenv Integration
+**Added python-dotenv dependency**:
+- Updated pyproject.toml with `python-dotenv>=1.0.0`
+- Installed dependency successfully with pip install -e .
+
+**Fixed Environment Loading**:
+- Added dotenv imports to both main.py and crew.py
+- Implemented load_dotenv() in crew.py at module level (before class definition)
+- Added fallback loading logic: `.env.local` → `.env` → warning if neither found
+- Fixed UTF-8 encoding for Windows console to handle Unicode characters
+
+#### ✅ Model Configuration Update
+**User switched to gemini/gemini-2.5-flash**:
+- Resolved gemini-2.0-flash overload issues (503 Service Unavailable)
+- Environment variables now loading correctly from .env.local
+- All API keys (FIRECRAWL_API_KEY, GEMINI_API_KEY, SUPABASE, PINECONE) accessible
+
+### Firecrawl API Issues Discovered
+
+#### ❌ Critical API Problems
+1. **JSON Schema Validation Errors**:
+   ```
+   Error: Firecrawl returned status 400: {"success":false,"error":"Bad Request","details":[{"code":"custom","message":"Invalid JSON schema.","path":["scrapeOptions","jsonOptions","schema"]}]}
+   ```
+   - Affecting: BVA Daily, BVA Annual, DNIT Investment scrapers
+   - Schema structure appears valid but failing Firecrawl validation
+
+2. **Response Object Attribute Errors**:
+   ```
+   Error 'Response' object has no attribute 'status'
+   ```
+   - Fixed: Changed `response.status` to `response.status_code` in firecrawl_crawl function
+   - Fixed: Corrected Authorization header from `Bearer: {api_key}` to `Bearer {api_key}`
+
+### Technical Implementation Details
+
+#### Files Modified
+1. **pyproject.toml**: Added python-dotenv>=1.0.0 dependency
+2. **main.py**: 
+   - Added UTF-8 console encoding for Windows
+   - Added dotenv imports and loading logic (now redundant due to crew.py loading)
+3. **crew.py**:
+   - Added dotenv loading at module level before class definition
+   - Fixed response.status → response.status_code in firecrawl_crawl
+   - Fixed Authorization header format in firecrawl_crawl
+
+#### Environment Variable Loading Flow
+```python
+# In crew.py (module level)
+if os.path.exists(".env.local"):
+    load_dotenv(".env.local")
+elif os.path.exists(".env"):
+    load_dotenv(".env")
+```
+
+### Current Status - Partial Success
+✅ **Environment Variables**: Successfully loading from .env.local  
+✅ **Model Configuration**: gemini/gemini-2.5-flash working  
+✅ **Pipeline Initialization**: Crew starting and agents executing  
+❌ **Firecrawl API**: JSON schema validation still failing  
+❌ **Data Extraction**: No successful data extraction due to API issues  
+
+### Next Phase - JSON Schema Deep Analysis Required
+**Critical Issue**: Firecrawl JSON schema validation failing despite apparently valid schemas
+**Investigation Needed**: 
+- Deep analysis of Firecrawl's JSON schema requirements
+- Schema structure validation against JSON Schema Draft specifications
+- Potential issues with nested properties, format constraints, or additionalProperties
+- Test with simplified schemas to isolate validation problems
+
+**Pipeline Status**: 🟡 **PARTIALLY FUNCTIONAL** - Environment loading works, API calls failing
+
+---
+
+## 2025-08-05 - JSON Schema Validation Bug Fix Session
+
+### Critical Bug Identified & Fixed
+**Root Cause**: Schema mutation bug in `test_mode` - code was directly modifying original schema objects by adding `"maxItems": 3`, corrupting them for Firecrawl validation.
+
+**Fix Applied**: 
+- Added `copy.deepcopy(schema)` in both `firecrawl_scrape` and `firecrawl_crawl` functions
+- Modified copy instead of original schema
+- Updated payload with modified schema copy
+
+### Documentation Added
+**Firecrawl API Critical Documentation** added to CLAUDE.md:
+- `firecrawl_scrape()`: Direct scraping, schema in `jsonOptions` (root level)  
+- `firecrawl_crawl()`: Crawling + scraping, schema in `scrapeOptions.jsonOptions` (nested)
+
+### Testing Results
+- ✅ Simple schema test: SUCCESS (API working, schemas valid)
+- ✅ Schema mutation bug: IDENTIFIED and FIXED
+- ⏳ Full pipeline test: Ready for execution
+
+**Pipeline Status**: 🟢 **READY FOR TESTING** - Schema validation bug resolved
+
+---
+
+## 🔄 PIPELINE ARCHITECTURE REDESIGN - 2025-08-05
+
+### Schema Validation Crisis & Architectural Pivot
+**Session by**: Claude Sonnet 4 (claude-sonnet-4-20250514)  
+**Date**: 2025-08-05  
+**Trigger**: Persistent complex schema validation failures despite bug fixes
+
+### User Insight & Strategic Decision
+**User**: "Do you think maybe I'm asking too much of this initial extractor agent, maybe we could simplify..."
+**Result**: Complete architectural restructure approved
+
+### NEW Architecture Philosophy
+**Change**: From "structured extraction" → "raw extraction + intelligent processing"
+
+**OLD Approach**:
+```
+Extractor (complex schemas) → Processor (refinement) → Vector → Loader
+     ↓ (brittle, API errors)
+```
+
+**NEW Approach**:
+```
+Extractor (raw content) → Processor (heavy lifting) → Vector → Loader
+     ↓ (robust, flexible)
+```
+
+### Implementation Progress (INTERRUPTED - USAGE LIMITS)
+- ✅ **Complete Plan Created**: Full architectural redesign strategy
+- ✅ **Plan Approved**: User confirmed new approach
+- 🔄 **Partially Implemented**: Started schema simplification
+  - ✅ Updated BVA Emisores Scraper (lines 304-336)
+  - ✅ Updated BVA Daily Reports Scraper (lines 340+)
+  - ⏸️ **INTERRUPTED**: 8 remaining scrapers need updates
+
+### Key Changes Made
+1. **Simplified Schema**: All scrapers now use content-focused schema:
+   ```json
+   {
+     "type": "object",
+     "properties": {
+       "page_content": {"type": "string"},
+       "links": {"type": "array", "items": {"type": "string"}},
+       "documents": {"type": "array", "items": {"type": "string"}},
+       "metadata": {"type": "object", "additionalProperties": true}
+     }
+   }
+   ```
+
+2. **Raw Extraction Prompts**: Focus on content capture vs. structured extraction
+
+### CRITICAL CONTINUATION STEPS
+**Next session must complete**:
+1. **Finish Schema Updates**: Update remaining 8 scrapers (lines ~431, 558, 638, 773, 896, 1014, 1117, 1276)
+2. **Update All Prompts**: Change to raw content extraction focus
+3. **Add Processor Tool**: Create `extract_structured_data_from_raw` for database schema compliance
+4. **Update Config Files**: agents.yaml, tasks.yaml with new architecture
+5. **Update CLAUDE.md**: Add new architecture documentation section
+6. **Test Pipeline**: Verify new approach eliminates API errors
+
+### Files Modified (Partial)
+- **crew.py**: 2/10 scrapers updated with simplified schemas
+- **Architecture**: 20% complete, needs continuation
+
+### Expected Benefits
+- ✅ Eliminate JSON schema validation errors
+- ✅ Reduce Firecrawl API timeouts and credit waste
+- ✅ More resilient to website structure changes
+- ✅ Better data quality through LLM-based processing
+- ✅ Maintain database schema compliance via processor tools
+
+---

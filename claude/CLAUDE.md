@@ -18,14 +18,69 @@
 ### InverBot - Sistema ETL Financiero Paraguay
 Sistema de extracción, procesamiento y carga de datos financieros paraguayos usando CrewAI, con almacenamiento híbrido en Supabase (datos estructurados) y Pinecone (vectores), el objetivo es crear esta base de datos para facilitar un sistema RAG.
 
-### Arquitectura General
+### Arquitectura General - NUEVA ARQUITECTURA (2025-08-05)
+
+**ARQUITECTURA ACTUALIZADA**:
 ```
-Extractor → Processor → Vector → Loader
-    ↓         ↓         ↓        ↓
-Firecrawl → Normaliza → PDFs → Supabase
-          → Valida   → Chunks → Pinecone
-          → Relaciona → Embeddings
+Extractor (raw) → Processor (heavy) → Vector → Loader
+    ↓               ↓                  ↓        ↓
+Firecrawl (simple) → Estructura    → PDFs → Supabase
+                   → Normaliza     → Chunks → Pinecone
+                   → Valida        → Embeddings
+                   → Relaciona
 ```
+
+**CAMBIO CRÍTICO**: El Extractor ahora captura contenido bruto, el Processor hace el trabajo pesado de estructuración.
+
+## Pipeline Architecture - Simplified Design (Updated 2025-08-05)
+
+### 🔄 Design Philosophy Change
+La pipeline ahora sigue un enfoque de "extracción de contenido bruto + estructuración inteligente":
+
+**ANTERIOR**: Extractor intenta extracción compleja con JSON schemas → Processor refina
+**NUEVO**: Extractor recolecta contenido bruto → Processor hace el trabajo pesado estructural
+
+### 🎯 Responsabilidades de Agentes
+
+#### 1. **Extractor Agent** - Raw Content Gatherer
+- **Objetivo**: Extraer contenido bruto y no estructurado con schemas mínimos
+- **Estrategia**: Usar schemas simples enfocados en captura de contenido vs. estructura
+- **Schemas Simplificados**:
+  ```json
+  {
+    "type": "object",
+    "properties": {
+      "page_content": {"type": "string"},
+      "links": {"type": "array", "items": {"type": "string"}},
+      "documents": {"type": "array", "items": {"type": "string"}},
+      "metadata": {"type": "object", "additionalProperties": true}
+    }
+  }
+  ```
+
+#### 2. **Processor Agent** - Heavy Structure Lifting (ENHANCED)
+- **Nueva Responsabilidad**: Convertir contenido bruto a formatos estructurados de base de datos
+- **Cumplimiento de Schema**: **DEBE seguir el schema de 14 tablas Supabase definido en este archivo**
+- **Herramientas Mejoradas**: Capacidades de parsing y estructuración inteligente
+- **Estrategia**: Usar comprensión de lenguaje natural del LLM para estructurar contenido bruto
+
+#### 3. **Vector & Loader Agents** - Sin Cambios
+- Funcionalidad existente se mantiene intacta
+
+### ✅ Beneficios de la Nueva Arquitectura
+- **Elimina errores de validación JSON schema** de Firecrawl
+- **Reduce timeouts de API** y uso de créditos
+- **Más resistente a cambios** en estructura de sitios web
+- **Mejor calidad de datos** mediante estructuración basada en LLM
+- **Cumplimiento estricto** del schema de base de datos
+- **Desarrollo más rápido** - más fácil de debuggear y modificar
+
+### 🚧 Status de Implementación (PARCIAL)
+- ✅ **Plan Completo**: Estrategia de reestructuración arquitectónica completa
+- 🔄 **Implementación Parcial**: 2/10 scrapers actualizados con schemas simplificados
+- ⏸️ **Interrumpido**: Límites de uso - necesita continuación de sesión
+
+**Estado Actual**: 🔄 **TRANSICIÓN ARQUITECTÓNICA** - 20% completo
 
 ## Bases de Datos
 
@@ -235,6 +290,50 @@ PINECONE_API_KEY="tu_pinecone_key"
 GEMINI_API_KEY="tu_gemini_key"
 FIRECRAWL_API_KEY="tu_firecrawl_key"
 ```
+
+### Firecrawl API - Configuración Crítica
+
+El sistema utiliza **DOS funciones diferentes** de Firecrawl con estructuras de payload **COMPLETAMENTE DIFERENTES**:
+
+#### firecrawl_scrape() - Scraping Directo
+**Uso**: Páginas que necesitan scraping directo sin crawling  
+**API Endpoint**: `https://api.firecrawl.dev/v1/scrape`
+
+**Estructura del Payload**:
+```python
+payload = {
+    "url": url,
+    "formats": ["json"],
+    "jsonOptions": {           # ← NIVEL RAÍZ
+        "prompt": prompt,
+        "schema": schema       # ← JSON Schema aquí directamente
+    }
+}
+```
+
+#### firecrawl_crawl() - Crawling + Scraping  
+**Uso**: Páginas que necesitan crawling antes del scraping  
+**API Endpoint**: `https://api.firecrawl.dev/v1/crawl`
+
+**Estructura del Payload**:
+```python
+payload = {
+    "url": url,
+    "scrapeOptions": {              # ← ENVUELTO EN scrapeOptions
+        "formats": ["json"],
+        "jsonOptions": {
+            "prompt": prompt,
+            "schema": schema        # ← JSON Schema dentro de scrapeOptions
+        }
+    }
+}
+```
+
+#### ⚠️ DIFERENCIA CRÍTICA
+- **firecrawl_scrape**: JSON Schema en `jsonOptions` (nivel raíz)
+- **firecrawl_crawl**: JSON Schema en `scrapeOptions.jsonOptions` (anidado)
+
+**Errores de validación** pueden ocurrir si los schemas no son compatibles con la estructura específica de cada API.
 
 ### Embeddings - Gemini
 - **Modelo**: `models/embedding-001`

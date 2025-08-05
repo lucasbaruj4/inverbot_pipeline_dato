@@ -8,6 +8,13 @@ import json
 import requests
 from supabase import create_client, Client
 from pinecone import Pinecone
+from dotenv import load_dotenv
+
+# Load environment variables from .env.local or .env
+if os.path.exists(".env.local"):
+    load_dotenv(".env.local")
+elif os.path.exists(".env"):
+    load_dotenv(".env")
 from inverbot_pipeline_dato.data import data_source 
 from crewai_tools import (
     # SerperDevTool,
@@ -29,6 +36,14 @@ def firecrawl_scrape(url, prompt, schema, test_mode=True):
         return "Error: Please set FIRECRAWL_API_KEY environment variable"
     
     try:
+        # Create a copy of schema first to avoid modifying original
+        if test_mode and schema and "properties" in schema:
+            import copy
+            schema = copy.deepcopy(schema)
+            for prop_name, prop_value in schema["properties"].items():
+                if "items" in prop_value and prop_value["type"] == "array":
+                    prop_value["maxItems"] = 3
+        
         payload = {
             "url": url,
             "formats": ["json"],
@@ -43,11 +58,6 @@ def firecrawl_scrape(url, prompt, schema, test_mode=True):
             payload["timeout"] = 10000
             payload["removeBase64Images"] = True
             payload["blockAds"] = True
-            
-            if schema and "properties" in schema:
-                for prop_name, prop_value in schema["properties"].items():
-                    if "items" in prop_value and prop_value["type"] == "array":
-                        prop_value["maxItems"] = 3
             
             
             
@@ -75,6 +85,14 @@ def firecrawl_crawl(url, prompt, schema, test_mode=True):
         return f"Please set up your environmental API under 'FIRECRAWL_API_KEY'"
     
     try:
+        # Create a copy of schema first to avoid modifying original
+        if test_mode and schema and "properties" in schema:
+            import copy
+            schema = copy.deepcopy(schema)
+            for prop_name, prop_value in schema["properties"].items():
+                if "items" in prop_value and prop_value["type"] == "array":
+                    prop_value["maxItems"] = 3
+        
         payload = {
             "url": url,
             "scrapeOptions":{
@@ -97,19 +115,14 @@ def firecrawl_crawl(url, prompt, schema, test_mode=True):
             payload["scrapeOptions"]["removeBase64Images"] = True
             payload["scrapeOptions"]["blockAds"] = True
             
-            if schema and "properties" in schema:
-                for prop_name, prop_value in schema["properties"].items():
-                    if "items" in prop_value and prop_value["type"] == "array":
-                        prop_value["maxItems"] = 3
-            
             
             
         response = requests.post(
             "https://api.firecrawl.dev/v1/crawl",
-            headers={"Authorization": f"Bearer: {api_key}"},
+            headers={"Authorization": f"Bearer {api_key}"},
             json=payload
         )
-        if response.status == 200:
+        if response.status_code == 200:
             data = response.json()
             if "data" in data:
                 return json.dumps(data.get('data'), indent=2, ensure_ascii=False)
@@ -290,100 +303,35 @@ class InverbotPipelineDato():
     # 1. Balances de Empresas
     @tool("BVA Emisores Scraper")
     def scrape_bva_emisores(test_mode=True) -> str:
-        """Scrapes BVA emisores listing page. Contains list of issuers, balances, prospectuses, risk analysis and relevant facts."""
+        """Scrapes BVA emisores listing page. Extracts raw content for processor agent to structure."""
+        # Simple content-focused schema for raw extraction
         schema = {
             "type": "object",
             "properties": {
-                "Categoria_Emisor": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_categoria_emisor": {"type": "integer"},
-                            "categoria_emisor": {"type": "string"}
-                        },
-                        "required": ["categoria_emisor"]
-                    }
-                },
-                "Emisores": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_emisor": {"type": "integer"},
-                            "nombre_emisor": {"type": "string"},
-                            "id_categoria_emisor": {"type": "integer"},
-                            "calificacion_bva": {"type": "string"}
-                        },
-                        "required": ["nombre_emisor"]
-                    }
-                },
-                "Informe_General": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_informe": {"type": "integer"},
-                            "id_emisor": {"type": "integer"},
-                            "id_tipo_informe": {"type": "integer"},
-                            "id_frecuencia": {"type": "integer"},
-                            "id_periodo": {"type": "integer"},
-                            "titulo_informe": {"type": "string"},
-                            "resumen_informe": {"type": "string"},
-                            "fecha_publicacion": {"type": "string", "format": "date"},
-                            "url_descarga_original": {"type": "string"},
-                            "detalles_informe_jsonb": {"type": "object", "additionalProperties": True},
-                            "contenido_raw": {"type": "string", "description": "Contenido textual sin procesar del informe o documento"}
-                        },
-                        "required": ["titulo_informe", "fecha_publicacion"]
-                    }
-                },
-                "Resumen_Informe_Financiero": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_resumen_financiero": {"type": "integer"},
-                            "id_informe": {"type": "integer"},
-                            "id_emisor": {"type": "integer"},
-                            "fecha_corte_informe": {"type": "string", "format": "date"},
-                            "moneda_informe": {"type": "integer"},
-                            "activos_totales": {"type": "number"},
-                            "pasivos_totales": {"type": "number"},
-                            "patrimonio_neto": {"type": "number"},
-                            "disponible": {"type": "number"},
-                            "utilidad_del_ejercicio": {"type": "number"},
-                            "ingresos_totales": {"type": "number"},
-                            "costos_operacionales": {"type": "number"},
-                            "total_ganancias": {"type": "number"},
-                            "total_perdidas": {"type": "number"},
-                            "retorno_sobre_patrimonio": {"type": "number"},
-                            "calificacion_riesgo_tendencia": {"type": "string"},
-                            "utilidad_neta_por_accion_ordinaria": {"type": "number"},
-                            "deuda_total": {"type": "number"},
-                            "ebitda": {"type": "number"},
-                            "margen_neto": {"type": "number"},
-                            "flujo_caja_operativo": {"type": "number"},
-                            "capital_integrado": {"type": "number"},
-                            "otras_metricas_jsonb": {"type": "object", "additionalProperties": True}
-                        },
-                        "required": ["id_emisor", "fecha_corte_informe"]
-                    }
-                }
+                "page_content": {"type": "string", "description": "All text content from the page"},
+                "links": {"type": "array", "items": {"type": "string"}, "description": "All URLs found on the page"},
+                "documents": {"type": "array", "items": {"type": "string"}, "description": "PDF or document URLs"},
+                "metadata": {"type": "object", "additionalProperties": True, "description": "Page metadata and structure info"}
             },
-            "required": ["Emisores"]
+            "required": ["page_content"]
         }
         
         url = "https://www.bolsadevalores.com.py/listado-de-emisores/"
-        prompt = """Extrae la siguiente información:
-        1. Lista de categorías de emisores (Categoria_Emisor)
-        2. Lista completa de emisores con nombre, categoría y calificación (Emisores)
-        3. Todos los informes disponibles para cada emisor con título, fecha, URL y resumen (Informe_General)
-        4. Datos financieros estructurados de los balances para cada emisor (Resumen_Informe_Financiero)
+        prompt = """Extract all content from the BVA emisores listing page for later processing:
+
+        CONTENT TO CAPTURE:
+        - All text content from the main page
+        - All links (URLs) found on the page, especially those leading to individual emisor pages
+        - Document URLs (PDFs, Excel files, etc.) for reports, balances, prospectuses
+        - Any metadata about page structure and navigation elements
+
+        CRAWLING INSTRUCTIONS:
+        - Navigate through the full page including clicking 'Cargar Mas' buttons to load more emisors
+        - Enter individual emisor pages to capture their content
+        - Look for documents under sections like 'Balances', 'Prospectos', 'Calificaciones', 'Hechos de Relevancia'
+        - Capture both the text content and document download links
         
-        Para cada documento o informe, incluye también el contenido raw cuando sea posible. Mantén la relación entre las tablas usando los IDs correspondientes.
-        GUIA DE CRAWLING
-        Cuando entres a la pagina te vas a encontrar con un listado de emisores, para ver mas emisores vas a tener que darle al boton que dice 'Cargar Mas', debes entrar en todos los emisores que encuentres y extraer los documentos que se te indican arriba. Tené en cuenta que vas a tener que guardar los links que llevan a los informes y tambien el texto para su posterior vectorizacion de los informes y otros documentos que encuentres en donde hayan metricas importantes. Adentro de cada emisor los documentos que buscamos estan bajo elementos que dice 'Balances', 'Prospectos', 'Calificaciones' y 'Hechos de Relevancia'."""
+        Focus on comprehensive content extraction rather than structured data formatting. The processor agent will handle structuring this raw content later."""
         
         return firecrawl_crawl(url, prompt, schema, test_mode)
 
@@ -391,44 +339,18 @@ class InverbotPipelineDato():
     # 2. Movimientos Diarios
     @tool("BVA Daily Reports Scraper")
     def scrape_bva_daily(test_mode=True) -> str:
-        """Scrapes BVA daily market movements reports."""
+        """Scrapes BVA daily market movements reports. Extracts raw content for processor agent to structure."""
+        # Simple content-focused schema for raw extraction
         schema = {
             "type": "object",
             "properties": {
-                "Movimiento_Diario_Bolsa": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_operacion": {"type": "integer"},
-                            "fecha_operacion": {"type": "string", "format": "date"},
-                            "cantidad_operacion": {"type": "number"},
-                            "id_instrumento": {"type": "integer"},
-                            "id_emisor": {"type": "integer"},
-                            "fecha_vencimiento_instrumento": {"type": "string", "format": "date"},
-                            "id_moneda": {"type": "integer"},
-                            "precio_operacion": {"type": "number"},
-                            "precio_anterior_instrumento": {"type": "number"},
-                            "tasa_interes_nominal": {"type": "number"},
-                            "tipo_cambio": {"type": "number"},
-                            "variacion_operacion": {"type": "number"},
-                            "volumen_gs_operacion": {"type": "number"}
-                        },
-                        "required": ["fecha_operacion", "id_instrumento", "precio_operacion"]
-                    }
-                },
-                "Instrumento": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_instrumento": {"type": "integer"},
-                            "simbolo_instrumento": {"type": "string"},
-                            "nombre_instrumento": {"type": "string"}
-                        },
-                        "required": ["simbolo_instrumento"]
-                    }
-                },
+                "page_content": {"type": "string", "description": "All text content from the page"},
+                "links": {"type": "array", "items": {"type": "string"}, "description": "All URLs found on the page"},
+                "documents": {"type": "array", "items": {"type": "string"}, "description": "PDF or document URLs"},
+                "metadata": {"type": "object", "additionalProperties": True, "description": "Page metadata and structure info"}
+            },
+            "required": ["page_content"]
+        }
                 "Moneda": {
                     "type": "array",
                     "items": {
@@ -497,7 +419,7 @@ class InverbotPipelineDato():
                             "id_periodo": {"type": "integer"},
                             "titulo_informe": {"type": "string"},
                             "resumen_informe": {"type": "string"},
-                            "fecha_publicacion": {"type": "string", "format": "date"},
+                            "fecha_publicacion": {"type": "string"},
                             "url_descarga_original": {"type": "string"},
                             "detalles_informe_jsonb": {
                                 "type": "object",
@@ -624,7 +546,7 @@ class InverbotPipelineDato():
                             "id_periodo": {"type": "integer"},
                             "titulo_informe": {"type": "string"},
                             "resumen_informe": {"type": "string"},
-                            "fecha_publicacion": {"type": "string", "format": "date"},
+                            "fecha_publicacion": {"type": "string"},
                             "url_descarga_original": {"type": "string"},
                             "detalles_informe_jsonb": {"type": "object", "additionalProperties": True},
                             "contenido_raw": {"type": "string"}
@@ -723,7 +645,7 @@ class InverbotPipelineDato():
                             "id_tipo_informe": {"type": "integer"},
                             "titulo_informe": {"type": "string"},
                             "resumen_informe": {"type": "string"},
-                            "fecha_publicacion": {"type": "string", "format": "date"},
+                            "fecha_publicacion": {"type": "string"},
                             "url_descarga_original": {"type": "string"},
                             "detalles_informe_jsonb": {"type": "object", "additionalProperties": True},
                             "contenido_raw": {"type": "string"}
@@ -838,7 +760,7 @@ class InverbotPipelineDato():
                             "id_frecuencia": {"type": "integer"},
                             "titulo_informe": {"type": "string"},
                             "resumen_informe": {"type": "string"},
-                            "fecha_publicacion": {"type": "string", "format": "date"},
+                            "fecha_publicacion": {"type": "string"},
                             "url_descarga_original": {"type": "string"},
                             "detalles_informe_jsonb": {"type": "object", "additionalProperties": True},
                             "contenido_raw": {"type": "string"}
@@ -962,7 +884,7 @@ class InverbotPipelineDato():
                             "id_periodo": {"type": "integer"},
                             "titulo_informe": {"type": "string"},
                             "resumen_informe": {"type": "string"},
-                            "fecha_publicacion": {"type": "string", "format": "date"},
+                            "fecha_publicacion": {"type": "string"},
                             "url_descarga_original": {"type": "string"},
                             "detalles_informe_jsonb": {"type": "object", "additionalProperties": True},
                             "contenido_raw": {"type": "string"}
@@ -1181,7 +1103,7 @@ class InverbotPipelineDato():
                             "id_tipo_informe": {"type": "integer"},
                             "titulo_informe": {"type": "string"},
                             "resumen_informe": {"type": "string"},
-                            "fecha_publicacion": {"type": "string", "format": "date"},
+                            "fecha_publicacion": {"type": "string"},
                             "url_descarga_original": {"type": "string"},
                             "detalles_informe_jsonb": {"type": "object", "additionalProperties": True},
                             "contenido_raw": {"type": "string"}
@@ -1343,7 +1265,7 @@ class InverbotPipelineDato():
                             "id_periodo": {"type": "integer"},
                             "titulo_informe": {"type": "string"},
                             "resumen_informe": {"type": "string"},
-                            "fecha_publicacion": {"type": "string", "format": "date"},
+                            "fecha_publicacion": {"type": "string"},
                             "url_descarga_original": {"type": "string"},
                             "detalles_informe_jsonb": {"type": "object", "additionalProperties": True},
                             "contenido_raw": {"type": "string"}
