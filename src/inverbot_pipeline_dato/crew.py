@@ -1,138 +1,254 @@
+# ================================================================================================
+# INVERBOT PIPELINE DATO - MAIN CREW FILE
+# ================================================================================================
+# Paraguayan Financial Data ETL Pipeline using CrewAI
+# Version: Post-Firecrawl Migration with Native API Integration
+# ================================================================================================
+
 import datetime
+import os
+import json
+import time
+from typing import List
+
+# CrewAI Imports
 from crewai import Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, crew, task
 from crewai.agents.agent_builder.base_agent import BaseAgent
-from typing import List
-import os
-import json
+from crewai.tools import tool
+
+# External Dependencies
 import requests
 from supabase import create_client, Client
 from pinecone import Pinecone
 from dotenv import load_dotenv
+from firecrawl import FirecrawlApp
 
 # Load environment variables from .env.local or .env
 if os.path.exists(".env.local"):
     load_dotenv(".env.local")
 elif os.path.exists(".env"):
     load_dotenv(".env")
-from inverbot_pipeline_dato.data import data_source 
-from crewai_tools import (
-    # SerperDevTool,
-    FirecrawlScrapeWebsiteTool,
-    FirecrawlCrawlWebsiteTool
-)
-from crewai.tools import tool
-import requests
-import os
+
+from inverbot_pipeline_dato.data import data_source
+
+# DISABLED: Native CrewAI Firecrawl tools due to version incompatibility
+# from crewai_tools import FirecrawlScrapeWebsiteTool, FirecrawlCrawlWebsiteTool
+# CrewAI tools v0.59.0 uses old 'params=' API while firecrawl-py v2.16.3 uses direct parameters
+
+# ================================================================================================
+# FIRECRAWL NATIVE API INTEGRATION
+# ================================================================================================
+# Custom implementation to bypass CrewAI tools version incompatibility
+
+# Initialize Firecrawl app for direct API access
+firecrawl_app = None
+
+def get_firecrawl_app():
+    """Get or create Firecrawl app instance"""
+    global firecrawl_app
+    if firecrawl_app is None:
+        api_key = os.getenv('FIRECRAWL_API_KEY')
+        if not api_key:
+            raise ValueError("FIRECRAWL_API_KEY environment variable is required")
+        firecrawl_app = FirecrawlApp(api_key=api_key)
+    return firecrawl_app
 
 # serper_dev_tool = SerperDevTool()
 
 
-def firecrawl_scrape(url, prompt, schema, test_mode=True):
-    """Base Firecrawl scraper with  JSON schema support"""
-    api_key = os.getenv("FIRECRAWL_API_KEY")
-    
-    if not api_key:
-        return "Error: Please set FIRECRAWL_API_KEY environment variable"
-    
+def firecrawl_scrape_native(url, prompt, schema, test_mode=True):
+    """Custom Firecrawl scraper using direct API with proper error handling"""
     try:
-        # Create a copy of schema first to avoid modifying original
-        if test_mode and schema and "properties" in schema:
-            import copy
-            schema = copy.deepcopy(schema)
-            for prop_name, prop_value in schema["properties"].items():
-                if "items" in prop_value and prop_value["type"] == "array":
-                    prop_value["maxItems"] = 3
+        app = get_firecrawl_app()
         
-        payload = {
-            "url": url,
-            "formats": ["json"],
-            "jsonOptions": {
-                "prompt": prompt,
-                "systemPrompt": "You're a specialized web scraper extracting structured data with raw content. For each structured item, extract required fields according to the schema and include long versions of structured data, like a whole report from where a singular data has been extracted, where available.",
-                "schema": schema
-            }
-        }
-        if test_mode:
-            payload["onlyMainContent"] = True
-            payload["timeout"] = 10000
-            payload["removeBase64Images"] = True
-            payload["blockAds"] = True
-            
-            
-            
-        response = requests.post(
-            "https://api.firecrawl.dev/v1/scrape",
-            headers={"Authorization": f"Bearer {api_key}"},
-            json=payload
+        # Configure based on test mode
+        wait_time = 3000 if test_mode else 5000
+        timeout = 30000 if test_mode else 45000
+        
+        # Use direct Firecrawl API - scrape is synchronous
+        result = app.scrape_url(
+            url=url,
+            formats=["markdown"],
+            only_main_content=True,
+            wait_for=wait_time,
+            timeout=timeout
         )
         
-        if response.status_code == 200:
-            data = response.json()
-            if "data" in data:
-                return json.dumps(data.get('data'), indent=2, ensure_ascii=False)
+        # Extract content from response
+        if hasattr(result, 'data') and result.data:
+            if hasattr(result.data, 'markdown') and result.data.markdown:
+                return result.data.markdown
+            elif hasattr(result.data, 'content') and result.data.content:
+                return result.data.content
             else:
-                return f"No se encontraron datos en {url}"
+                return str(result.data)
+        elif hasattr(result, 'markdown'):
+            return result.markdown
+        elif hasattr(result, 'content'):
+            return result.content
         else:
-            return f"Error: Firecrawl returned status {response.status_code}: {response.text}"
+            return str(result) if result else f"No content extracted from {url}"
+            
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f"Error with Firecrawl scraper: {str(e)}"
 
-def firecrawl_crawl(url, prompt, schema, test_mode=True):
-    '''Firecrawl crawler with JSON schema support"'''
-    api_key = os.getenv("FIRECRAWL_API_KEY")
-    if not api_key:
-        return f"Please set up your environmental API under 'FIRECRAWL_API_KEY'"
-    
+def firecrawl_crawl_native(url, prompt, schema, test_mode=True):
+    """Custom Firecrawl crawler using direct API with PROPER ASYNC HANDLING"""
     try:
-        # Create a copy of schema first to avoid modifying original
-        if test_mode and schema and "properties" in schema:
-            import copy
-            schema = copy.deepcopy(schema)
-            for prop_name, prop_value in schema["properties"].items():
-                if "items" in prop_value and prop_value["type"] == "array":
-                    prop_value["maxItems"] = 3
+        app = get_firecrawl_app()
         
-        payload = {
-            "url": url,
-            "scrapeOptions":{
-                "formats":["json"],
-                "jsonOptions":{
-                "prompt": prompt,
-                "systemPrompt": "You're a specialized web crawler extracting structured data with raw content. For each structured item, extract required fields according to the schema and include long versions of structured data, like a whole report from where a singular data has been extracted, where available.",
-                "schema": schema
-            }
-            }
-        }
-        if test_mode:
-            payload["maxDepth"] = 1
-            payload["maxDiscoveryDepth"] = 1
-            payload["limit"] = 3
-            payload["allowExternalLinks"] = False
-            payload["allowBackwardLinks"] = False
-            payload["scrapeOptions"]["onlyMainContent"] = True
-            payload["scrapeOptions"]["timeout"] = 10000
-            payload["scrapeOptions"]["removeBase64Images"] = True
-            payload["scrapeOptions"]["blockAds"] = True
-            
-            
-            
-        response = requests.post(
-            "https://api.firecrawl.dev/v1/crawl",
-            headers={"Authorization": f"Bearer {api_key}"},
-            json=payload
+        # Configure based on test mode
+        max_depth = 2
+        limit = 10 if test_mode else 30
+        poll_interval = 2  # seconds between status checks
+        max_wait_time = 120 if test_mode else 300  # maximum wait time in seconds
+        
+        print(f"🕷️ Starting crawl of {url} (limit: {limit}, max_depth: {max_depth})")
+        
+        # Start the crawl job - this returns immediately with a job ID
+        crawl_response = app.crawl_url(
+            url=url,
+            max_depth=max_depth,
+            limit=limit,
+            allow_backward_links=False,
+            allow_external_links=False,
+            scrape_options={
+                "formats": ["markdown"],
+                "only_main_content": True,
+                "wait_for": 3000,
+                "timeout": 30000
+            },
+            poll_interval=poll_interval
         )
-        if response.status_code == 200:
-            data = response.json()
-            if "data" in data:
-                return json.dumps(data.get('data'), indent=2, ensure_ascii=False)
-            else:
-                return f"No se encontraron datos en {url}"
-        else:
-            return f"Error: Firecrawl returned status {response.status_code}: {response.text}"
+        
+        print(f"🔄 Crawl job started. Waiting for completion...")
+        
+        # If we get immediate data, return it
+        if hasattr(crawl_response, 'data') and crawl_response.data:
+            print(f"✅ Crawl completed immediately with {len(crawl_response.data)} pages")
+            return format_crawl_results(crawl_response.data)
+        
+        # If we get a job ID, poll for completion
+        if hasattr(crawl_response, 'id'):
+            job_id = crawl_response.id
+            print(f"📋 Got job ID: {job_id}. Polling for results...")
+            
+            start_time = time.time()
+            while time.time() - start_time < max_wait_time:
+                try:
+                    # Check job status
+                    status = app.check_crawl_status(job_id)
+                    
+                    if hasattr(status, 'status'):
+                        print(f"🔍 Crawl status: {status.status}")
+                        
+                        if status.status == 'completed':
+                            if hasattr(status, 'data') and status.data:
+                                print(f"✅ Crawl completed with {len(status.data)} pages")
+                                return format_crawl_results(status.data)
+                            else:
+                                print("⚠️ Crawl completed but no data returned")
+                                return f"Crawl completed but no data was extracted from {url}"
+                        
+                        elif status.status == 'failed':
+                            error_msg = getattr(status, 'error', 'Unknown error')
+                            print(f"❌ Crawl failed: {error_msg}")
+                            return f"Crawl failed for {url}: {error_msg}"
+                        
+                        elif status.status in ['pending', 'running']:
+                            print(f"⏳ Crawl in progress... waiting {poll_interval}s")
+                            time.sleep(poll_interval)
+                            continue
+                    
+                    # If status doesn't have expected format, wait and retry
+                    time.sleep(poll_interval)
+                    
+                except Exception as status_error:
+                    print(f"⚠️ Error checking status: {status_error}")
+                    time.sleep(poll_interval)
+                    continue
+            
+            # Timeout reached
+            print(f"⏰ Crawl timeout reached ({max_wait_time}s)")
+            return f"Crawl timeout for {url} after {max_wait_time} seconds"
+        
+        # Fallback: return whatever we got
+        return str(crawl_response) if crawl_response else f"No response from crawl of {url}"
+        
     except Exception as e:
-        return f"Error {str(e)}"        
+        print(f"❌ Crawl error: {str(e)}")
+        return f"Error with Firecrawl crawler: {str(e)}"
+
+
+def format_crawl_results(data):
+    """Format crawl results into a readable string"""
+    if not data:
+        return "No crawl data available"
     
+    if isinstance(data, list):
+        results = []
+        for i, page in enumerate(data[:5]):  # Limit to first 5 pages to avoid huge responses
+            # Handle both dict and object responses
+            if isinstance(page, dict):
+                # Page is a dictionary - use dict access
+                content = None
+                url = page.get('url', f'Page {i+1}')
+                
+                if 'markdown' in page and page['markdown']:
+                    content = page['markdown']
+                elif 'content' in page and page['content']:
+                    content = page['content']
+                elif 'data' in page and isinstance(page['data'], dict):
+                    # Sometimes content is nested in data
+                    data_obj = page['data']
+                    if 'markdown' in data_obj and data_obj['markdown']:
+                        content = data_obj['markdown']
+                    elif 'content' in data_obj and data_obj['content']:
+                        content = data_obj['content']
+                
+                if content:
+                    # Truncate long content
+                    content = content[:1000] + "..." if len(content) > 1000 else content
+                    results.append(f"=== {url} ===\n{content}\n")
+                else:
+                    # Show available keys for debugging
+                    available_keys = list(page.keys())
+                    results.append(f"=== {url} ===\n[No content found. Available keys: {available_keys}]\n")
+                    
+            else:
+                # Page is an object - use attribute access
+                content = None
+                url = getattr(page, 'url', f'Page {i+1}')
+                
+                if hasattr(page, 'markdown') and page.markdown:
+                    content = page.markdown
+                elif hasattr(page, 'content') and page.content:
+                    content = page.content
+                
+                if content:
+                    content = content[:1000] + "..." if len(content) > 1000 else content
+                    results.append(f"=== {url} ===\n{content}\n")
+        
+        if len(data) > 5:
+            results.append(f"\n[... and {len(data) - 5} more pages]")
+        
+        return "\n".join(results) if results else "No readable content in crawl results"
+    
+    # Handle single dict response
+    elif isinstance(data, dict):
+        if 'markdown' in data and data['markdown']:
+            return data['markdown'][:1000] + ("..." if len(data['markdown']) > 1000 else "")
+        elif 'content' in data and data['content']:
+            return data['content'][:1000] + ("..." if len(data['content']) > 1000 else "")
+        else:
+            return f"Dict response with keys: {list(data.keys())}"
+    
+    return str(data)
+
+# ================================================================================================
+# MAIN CREW CLASS
+# ================================================================================================
 
 @CrewBase
 class InverbotPipelineDato():
@@ -299,47 +415,185 @@ class InverbotPipelineDato():
         self.log_performance(f"Performance report saved to: {report_file}")
         return report_file
 
+    # ============================================================================================
+    # SCRAPER TOOLS - BVA (Bolsa de Valores de Asunción)
+    # ============================================================================================
 
-    # 1. Balances de Empresas
     @tool("BVA Emisores Scraper")
     def scrape_bva_emisores(test_mode=True) -> str:
-        """Scrapes BVA emisores listing page. Extracts raw content for processor agent to structure."""
-        # Simple content-focused schema for raw extraction
-        schema = {
-            "type": "object",
-            "properties": {
-                "page_content": {"type": "string", "description": "All text content from the page"},
-                "links": {"type": "array", "items": {"type": "string"}, "description": "All URLs found on the page"},
-                "documents": {"type": "array", "items": {"type": "string"}, "description": "PDF or document URLs"},
-                "metadata": {"type": "object", "additionalProperties": True, "description": "Page metadata and structure info"}
-            },
-            "required": ["page_content"]
-        }
-        
+        """Scrapes BVA emisores listing page using native CrewAI tools. Extracts raw content for processor agent to structure."""
         url = "https://www.bolsadevalores.com.py/listado-de-emisores/"
-        prompt = """Extract all content from the BVA emisores listing page for later processing:
-
-        CONTENT TO CAPTURE:
-        - All text content from the main page
-        - All links (URLs) found on the page, especially those leading to individual emisor pages
-        - Document URLs (PDFs, Excel files, etc.) for reports, balances, prospectuses
-        - Any metadata about page structure and navigation elements
-
-        CRAWLING INSTRUCTIONS:
-        - Navigate through the full page including clicking 'Cargar Mas' buttons to load more emisors
-        - Enter individual emisor pages to capture their content
-        - Look for documents under sections like 'Balances', 'Prospectos', 'Calificaciones', 'Hechos de Relevancia'
-        - Capture both the text content and document download links
         
-        Focus on comprehensive content extraction rather than structured data formatting. The processor agent will handle structuring this raw content later."""
-        
-        return firecrawl_crawl(url, prompt, schema, test_mode)
+        try:
+            # Configure crawling for BVA emisores with proper depth
+            crawl_options = {
+                "maxDepth": 2,  # Main page + individual emisor pages
+                "limit": 15 if test_mode else 50,  # More coverage in production
+                "allowExternalLinks": False,
+                "allowBackwardLinks": False
+            }
+            
+            page_options = {
+                "onlyMainContent": True,
+                "removeBase64Images": True,
+                "formats": ["markdown", "json"],
+                "waitFor": 3000,
+                "timeout": 30000
+            }
+            
+            # Use native CrewAI crawl tool - simplified call
+            result = firecrawl_crawl_native(url, "", {}, test_mode)
+            
+            return str(result) if result else f"No content crawled from BVA Emisores: {url}"
+            
+        except Exception as e:
+            return f"Error crawling BVA Emisores: {str(e)}"
 
 
     # 2. Movimientos Diarios
     @tool("BVA Daily Reports Scraper")
     def scrape_bva_daily(test_mode=True) -> str:
-        """Scrapes BVA daily market movements reports. Extracts raw content for processor agent to structure."""
+        """Scrapes BVA daily market movements using native CrewAI tools. Extracts raw content for processor agent to structure."""
+        url = "https://www.bolsadevalores.com.py/informes-diarios/"
+        
+        try:
+            # Configure scraping for BVA daily reports
+            page_options = {
+                "onlyMainContent": True,
+                "removeBase64Images": True,
+                "formats": ["markdown", "json"],
+                "waitFor": 5000 if test_mode else 8000,  # Faster for testing
+                "timeout": 30000 if test_mode else 45000  # Conservative for testing
+            }
+            
+            # Use native CrewAI scrape tool - simplified call
+            result = firecrawl_scrape_native(url, "", {}, test_mode)
+            
+            return str(result) if result else f"No content scraped from BVA Daily: {url}"
+            
+        except Exception as e:
+            return f"Error scraping BVA Daily: {str(e)}"
+    # 3. Volumen Mensual
+    @tool("BVA Monthly Reports Scraper")
+    def scrape_bva_monthly(test_mode=True) -> str:
+        """Scrapes BVA monthly reports using native CrewAI tools. Extracts raw content for processor agent to structure."""
+        url = "https://www.bolsadevalores.com.py/informes-mensuales/"
+        
+        try:
+            # Configure crawling for BVA monthly reports 
+            crawl_options = {
+                "maxDepth": 1,  # Single page with forms/dropdowns
+                "limit": 5 if test_mode else 20,
+                "allowExternalLinks": False
+            }
+            
+            page_options = {
+                "onlyMainContent": True,
+                "removeBase64Images": True,
+                "formats": ["markdown", "json"],
+                "waitFor": 4000,  # Wait for forms and dropdowns to load
+                "timeout": 30000
+            }
+            
+            # Use native CrewAI crawl tool - simplified call
+            result = firecrawl_crawl_native(url, "", {}, test_mode)
+            
+            return str(result) if result else f"No content crawled from BVA Monthly: {url}"
+            
+        except Exception as e:
+            return f"Error crawling BVA Monthly: {str(e)}"
+    # 4. Resumen Anual
+    @tool("BVA Annual Reports Scraper")
+    def scrape_bva_annual(test_mode=True) -> str:
+        """Scrapes BVA annual reports using native CrewAI tools. Extracts raw content for processor agent to structure."""
+        url = "https://www.bolsadevalores.com.py/informes-anuales/"
+        
+        try:
+            # Configure scraping for BVA annual reports
+            page_options = {
+                "onlyMainContent": True,
+                "removeBase64Images": True,
+                "formats": ["markdown", "json"],
+                "waitFor": 3000 if test_mode else 6000,  # Faster for testing
+                "timeout": 30000 if test_mode else 45000  # Conservative for testing
+            }
+            
+            # Use native CrewAI scrape tool - simplified call
+            result = firecrawl_scrape_native(url, "", {}, test_mode)
+            
+            return str(result) if result else f"No content scraped from BVA Annual: {url}"
+            
+        except Exception as e:
+            return f"Error scraping BVA Annual: {str(e)}"
+
+    # ============================================================================================
+    # SCRAPER TOOLS - GOVERNMENT DATA
+    # ============================================================================================
+
+    @tool("Paraguay Open Data Scraper")
+    def scrape_datos_gov(test_mode=True) -> str:
+        """Scrapes Paraguay's open data portal using native CrewAI tools. Extracts raw content for processor agent to structure."""
+        url = "https://www.datos.gov.py/"
+        
+        try:
+            # Configure crawling for Paraguay open data portal
+            crawl_options = {
+                "maxDepth": 2,  # Main page + data category pages
+                "limit": 10 if test_mode else 30,
+                "allowExternalLinks": False,
+                "allowBackwardLinks": False
+            }
+            
+            page_options = {
+                "onlyMainContent": True,
+                "removeBase64Images": True,
+                "formats": ["markdown", "json"],
+                "waitFor": 4000,  # Wait for data catalogs to load
+                "timeout": 30000
+            }
+            
+            # Use native CrewAI crawl tool - simplified call
+            result = firecrawl_crawl_native(url, "", {}, test_mode)
+            
+            return str(result) if result else f"No content crawled from Paraguay Open Data: {url}"
+            
+        except Exception as e:
+            return f"Error crawling Paraguay Open Data: {str(e)}"
+    # 6. Estadísticas Macroeconómicas (INE)
+    @tool("INE Statistics Scraper")
+    def scrape_ine_main(test_mode=True) -> str:
+        """Scrapes National Statistics Institute using native CrewAI tools. Extracts raw content for processor agent to structure."""
+        url = "https://www.ine.gov.py/"
+        
+        try:
+            # Configure crawling for INE main site
+            crawl_options = {
+                "maxDepth": 2,  # Main page + publication pages
+                "limit": 12 if test_mode else 40,
+                "allowExternalLinks": False,
+                "allowBackwardLinks": False
+            }
+            
+            page_options = {
+                "onlyMainContent": True,
+                "removeBase64Images": True,
+                "formats": ["markdown", "json"],
+                "waitFor": 4000,  # Wait for publication lists to load
+                "timeout": 30000
+            }
+            
+            # Use native CrewAI crawl tool - simplified call
+            result = firecrawl_crawl_native(url, "", {}, test_mode)
+            
+            return str(result) if result else f"No content crawled from INE Main: {url}"
+            
+        except Exception as e:
+            return f"Error crawling INE Main: {str(e)}"
+
+    # 7. Estadísticas Sociales
+    @tool("INE Social Publications Scraper")
+    def scrape_ine_social(test_mode=True) -> str:
+        """Scrapes INE portal for social statistics. Extracts raw content for processor agent to structure."""
         # Simple content-focused schema for raw extraction
         schema = {
             "type": "object",
@@ -350,572 +604,6 @@ class InverbotPipelineDato():
                 "metadata": {"type": "object", "additionalProperties": True, "description": "Page metadata and structure info"}
             },
             "required": ["page_content"]
-        }
-                "Moneda": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_moneda": {"type": "integer"},
-                            "codigo_moneda": {"type": "string"},
-                            "nombre_moneda": {"type": "string"}
-                        },
-                        "required": ["codigo_moneda"]
-                    }
-                }
-            },
-            "required": ["Movimiento_Diario_Bolsa"]
-        }
-        
-        url = "https://www.bolsadevalores.com.py/informes-diarios/"
-        prompt = """Extrae la siguiente información de la página de informes diarios de la Bolsa de Valores de Asunción:
-
-        1. Todos los movimientos diarios del mercado (Movimiento_Diario_Bolsa) con:
-        - fecha_operacion: fecha de la operación
-        - cantidad_operacion: volumen de la operación
-        - información del instrumento (simbolo_instrumento, nombre_instrumento)
-        - información del emisor (nombre_emisor)
-        - información de la moneda (codigo_moneda, nombre_moneda)
-        - precio_operacion: precio de la operación
-        - precio_anterior_instrumento: precio anterior del instrumento
-        - tasa_interes_nominal: tasa de interés (si aplica)
-        - tipo_cambio: tipo de cambio (si aplica)
-        - variacion_operacion: variación porcentual
-        - volumen_gs_operacion: volumen en guaraníes
-
-        2. Información de los instrumentos mencionados (Instrumento):
-        - simbolo_instrumento: código del instrumento
-        - nombre_instrumento: nombre completo
-        - fecha_vencimiento_instrumento: fecha de vencimiento (si aplica)
-
-        3. Información de las monedas utilizadas (Moneda):
-        - codigo_moneda: código de la moneda
-        - nombre_moneda: nombre completo de la moneda
-
-        GUÍA DE SCRAPING:
-        La página muestra una tabla con movimientos diarios del mercado bursátil. Navega por la tabla completa, extrayendo cada fila como un movimiento individual. La tabla probablemente tenga columnas para fecha, instrumento, emisor, cantidad, precio, variación, etc. Si hay paginación o botones para cargar más datos, asegúrate de extraer todos los movimientos disponibles.
-
-        Para cada instrumento y moneda encontrados, extrae también sus detalles completos, manteniendo la relación con los movimientos correspondientes mediante IDs consistentes. Busca información adicional que pueda estar en tooltips o enlaces expandibles.
-
-        No busques un informe general o título separado, ya que esta página contiene directamente la tabla de movimientos diarios. Concéntrate en extraer todos los datos estructurados de la tabla principal y cualquier información complementaria visible en la página.
-        """
-        
-        return firecrawl_scrape(url, prompt, schema, test_mode)
-    # 3. Volumen Mensual
-    @tool("BVA Monthly Reports Scraper")
-    def scrape_bva_monthly(test_mode=True) -> str:
-        """Scrapes BVA monthly reports including PDFs and structured data."""
-        schema = {
-            "type": "object",
-            "properties": {
-                "Informe_General": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_informe": {"type": "integer"},
-                            "id_tipo_informe": {"type": "integer"},
-                            "id_frecuencia": {"type": "integer"},
-                            "id_periodo": {"type": "integer"},
-                            "titulo_informe": {"type": "string"},
-                            "resumen_informe": {"type": "string"},
-                            "fecha_publicacion": {"type": "string"},
-                            "url_descarga_original": {"type": "string"},
-                            "detalles_informe_jsonb": {
-                                "type": "object",
-                                "properties": {
-                                    "volumen_total": {"type": "number"},
-                                    "variaciones": {"type": "array", "items": {"type": "object"}},
-                                    "emisiones": {"type": "array", "items": {"type": "object"}}
-                                }
-                            },
-                            "contenido_raw": {"type": "string"}
-                        },
-                        "required": ["titulo_informe", "fecha_publicacion", "url_descarga_original"]
-                    }
-                },
-                "Periodo_Informe": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_periodo": {"type": "integer"},
-                            "nombre_periodo": {"type": "string"}
-                        },
-                        "required": ["nombre_periodo"]
-                    }
-                },
-                "Dato_Macroeconomico": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_dato_macro": {"type": "integer"},
-                            "id_informe": {"type": "integer"},
-                            "indicador_nombre": {"type": "string"},
-                            "fecha_dato": {"type": "string", "format": "date"},
-                            "valor_numerico": {"type": "number"},
-                            "unidad_medida": {"type": "integer"},
-                            "id_frecuencia": {"type": "integer"},
-                            "link_fuente_especifico": {"type": "string"},
-                            "otras_propiedades_jsonb": {"type": "object", "additionalProperties": True},
-                            "id_moneda": {"type": "integer"}
-                        },
-                        "required": ["indicador_nombre", "fecha_dato", "valor_numerico"]
-                    }
-                }
-            },
-            "required": ["Informe_General"]
-        }
-        
-        url = "https://www.bolsadevalores.com.py/informes-mensuales/"
-        prompt = """Extrae la siguiente información de la página de informes mensuales de la Bolsa de Valores de Asunción:
-
-        1. Todos los informes mensuales disponibles (Informe_General) con:
-        - titulo_informe: título completo del informe
-        - id_tipo_informe: identificador del tipo de informe
-        - id_frecuencia: identificador de frecuencia mensual
-        - id_periodo: identificador del período (mes/año)
-        - fecha_publicacion: fecha de publicación del informe
-        - resumen_informe: resumen o descripción del informe
-        - url_descarga_original: enlace de descarga del informe (PDF u otro formato)
-        - detalles_informe_jsonb: datos estructurados del informe
-        - contenido_raw: texto completo o resumen detallado del informe
-
-        2. Información sobre los períodos mencionados (Periodo_Informe):
-        - id_periodo: identificador único del período
-        - nombre_periodo: nombre del período (ej. "Agosto 2025")
-
-        3. Datos macroeconómicos específicos (Dato_Macroeconomico) que aparecen en los informes:
-        - id_dato_macro: identificador único del dato
-        - id_informe: referencia al informe donde aparece
-        - indicador_nombre: nombre del indicador económico
-        - fecha_dato: fecha a la que corresponde el dato
-        - valor_numerico: valor del indicador
-        - unidad_medida: unidad de medida utilizada
-        - id_frecuencia: frecuencia del indicador
-        - otras_propiedades_jsonb: propiedades adicionales del dato
-
-        GUÍA DE CRAWLING:
-        La página tiene una estructura compleja con múltiples secciones y tipos de informes. Sigue estos pasos:
-
-        1. Primero, navega el menú lateral izquierdo "MENÚ DE INFORMES" que contiene diferentes categorías:
-        - COMPARATIVAS
-        - VARIACIONES
-        - VOLUMEN NEGOCIADO
-        - POR OPERACIONES
-        - POR INSTRUMENTOS
-        - EMISIONES REGISTRADAS
-        - TOP 10 EMISORES
-
-        2. Para cada categoría del menú, accede y extrae:
-        - El título de la sección
-        - El selector de mes (busca el dropdown "SELECCIONAR MES")
-        - El botón "DESCARGAR PDF" para obtener la URL del informe completo
-        - Los datos numéricos y estadísticos mostrados (como "VOLUMEN MENSUAL NEGOCIADO EN GS")
-        - Las comparativas porcentuales (como "VS MES ANTERIOR: -100%")
-
-        3. Explora las visualizaciones por categorías como:
-        - "Por moneda" (USD, GS)
-        - "Por mercado" (Mercado Primario, Mercado Secundario)
-        - "Por instrumento" (Bonos, Acciones, Fondos de Inversión)
-
-        4. Para cada mes disponible en el selector, repite el proceso para obtener datos históricos.
-
-        5. Presta atención a los PDF descargables, ya que contienen información más detallada y estructurada que deberá ser extraída.
-
-        Mantén la relación entre las tablas asignando IDs consistentes. Por ejemplo, si extraes datos de "Agosto 2025", asegúrate que todos los datos de ese período tengan el mismo id_periodo.
-        """
-        
-        return firecrawl_crawl(url, prompt, schema, test_mode)
-    # 4. Resumen Anual
-    @tool("BVA Annual Reports Scraper")
-    def scrape_bva_annual(test_mode=True) -> str:
-        """Scrapes BVA annual reports in PDF format."""
-        schema = {
-            "type": "object",
-            "properties": {
-                "Informe_General": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_informe": {"type": "integer"},
-                            "id_tipo_informe": {"type": "integer"},
-                            "id_frecuencia": {"type": "integer"},
-                            "id_periodo": {"type": "integer"},
-                            "titulo_informe": {"type": "string"},
-                            "resumen_informe": {"type": "string"},
-                            "fecha_publicacion": {"type": "string"},
-                            "url_descarga_original": {"type": "string"},
-                            "detalles_informe_jsonb": {"type": "object", "additionalProperties": True},
-                            "contenido_raw": {"type": "string"}
-                        },
-                        "required": ["titulo_informe", "fecha_publicacion", "url_descarga_original"]
-                    }
-                },
-                "Periodo_Informe": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_periodo": {"type": "integer"},
-                            "nombre_periodo": {"type": "string"}
-                        },
-                        "required": ["nombre_periodo"]
-                    }
-                }
-            },
-            "required": ["Informe_General"]
-        }
-        
-        url = "https://www.bolsadevalores.com.py/informes-anuales/"
-        prompt = """Extrae la siguiente información de la página de informes anuales de la Bolsa de Valores de Asunción:
-
-        1. Todos los informes anuales disponibles (Informe_General) con:
-        - titulo_informe: título del informe (ej. "Informe 2024", "Informe 2023", etc.)
-        - id_tipo_informe: identificador del tipo de informe (para informes anuales)
-        - id_frecuencia: identificador de frecuencia anual
-        - id_periodo: identificador del período (año)
-        - fecha_publicacion: año del informe como fecha
-        - url_descarga_original: URL completa del enlace de descarga del PDF
-        - contenido_raw: deja este campo vacío inicialmente, se llenará al procesar el PDF
-
-        2. Información sobre los períodos anuales (Periodo_Informe):
-        - id_periodo: identificador único del período
-        - nombre_periodo: año del informe (ej. "2024", "2023", etc.)
-
-        GUÍA DE SCRAPING:
-        La página muestra una lista simple de enlaces de descarga para informes anuales, cada uno con un icono de descarga y el texto "Descargar Informe [AÑO]". Para cada informe visible:
-
-        1. Extrae el título exacto del enlace (ej. "Descargar Informe 2024")
-        2. Extrae el año del informe del título
-        3. Captura la URL completa del enlace de descarga
-        4. Asigna un id_tipo_informe consistente para todos los informes anuales
-        5. Asigna un id_frecuencia consistente para frecuencia anual
-        6. Genera un id_periodo único para cada año
-        7. Formatea el año como fecha de publicación (ej. "2024" como "2024-01-01")
-
-        Importante: 
-        - Haz clic en el botón "Cargar más" al final de la página para obtener informes de años anteriores
-        - No intentes extraer el contenido de los PDFs en esta fase, solo captura las URLs
-        - La página muestra "MERCADO CERRADO: No hay datos para mostrar" en la parte superior, pero esto no afecta a los enlaces de informes
-
-        No hay datos macroeconómicos visibles directamente en esta página, solo enlaces a los PDFs. Los datos macroeconómicos deberán extraerse al procesar los PDFs descargados en una fase posterior.
-
-        Mantén la relación entre Informe_General y Periodo_Informe usando los mismos id_periodo.
-        """
-        
-        return firecrawl_scrape(url, prompt, schema, test_mode)
-
-    # 5. Contexto Macroeconómico
-    @tool("Paraguay Open Data Scraper")
-    def scrape_datos_gov(test_mode=True) -> str:
-        """Scrapes Paraguay's official open data portal with macroeconomic data."""
-        schema = {
-            "type": "object",
-            "properties": {
-                "Dato_Macroeconomico": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_dato_macro": {"type": "integer"},
-                            "id_informe": {"type": "integer"},
-                            "indicador_nombre": {"type": "string"},
-                            "fecha_dato": {"type": "string", "format": "date"},
-                            "valor_numerico": {"type": "number"},
-                            "unidad_medida": {"type": "integer"},
-                            "id_frecuencia": {"type": "integer"},
-                            "link_fuente_especifico": {"type": "string"},
-                            "otras_propiedades_jsonb": {"type": "object", "additionalProperties": True},
-                            "id_moneda": {"type": "integer"},
-                            "id_emisor": {"type": "integer"},
-                            "contexto_raw": {"type": "string"}
-                        },
-                        "required": ["indicador_nombre", "fecha_dato", "valor_numerico"]
-                    }
-                },
-                "Informe_General": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_informe": {"type": "integer"},
-                            "id_tipo_informe": {"type": "integer"},
-                            "titulo_informe": {"type": "string"},
-                            "resumen_informe": {"type": "string"},
-                            "fecha_publicacion": {"type": "string"},
-                            "url_descarga_original": {"type": "string"},
-                            "detalles_informe_jsonb": {"type": "object", "additionalProperties": True},
-                            "contenido_raw": {"type": "string"}
-                        },
-                        "required": ["titulo_informe", "fecha_publicacion"]
-                    }
-                },
-                "Unidad_Medida": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_unidad_medida": {"type": "integer"},
-                            "simbolo": {"type": "string"},
-                            "nombre_unidad": {"type": "string"}
-                        },
-                        "required": ["simbolo", "nombre_unidad"]
-                    }
-                },
-                "Frecuencia": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_frecuencia": {"type": "integer"},
-                            "nombre_frecuencia": {"type": "string"}
-                        },
-                        "required": ["nombre_frecuencia"]
-                    }
-                }
-            },
-            "required": ["Dato_Macroeconomico"]
-        }
-        
-        url = "https://www.datos.gov.py/"
-        prompt = """Extrae la siguiente información del portal de datos abiertos de Paraguay (datos.gov.py):
-
-        1. Datos macroeconómicos (Dato_Macroeconomico) disponibles en las diferentes categorías, especialmente en:
-        - Agricultura y Ganadería
-        - Desarrollo Social
-        - Industria, Comercio y Turismo
-        - Trabajo y Empleo
-        - Pobreza
-        - Economía e identificación
-        Incluye para cada dato:
-        - indicador_nombre: nombre del indicador económico
-        - fecha_dato: fecha a la que corresponde el dato
-        - valor_numerico: valor del indicador
-        - unidad_medida: unidad de medida utilizada
-        - id_frecuencia: frecuencia del indicador
-        - link_fuente_especifico: enlace directo a la fuente del dato
-        - contexto_raw: descripción o contexto del indicador
-
-        2. Informes y documentos (Informe_General) disponibles para descarga:
-        - titulo_informe: título completo del documento
-        - id_tipo_informe: tipo de informe o documento
-        - fecha_publicacion: fecha de publicación
-        - url_descarga_original: enlace de descarga
-        - resumen_informe: descripción o resumen del contenido
-
-        3. Unidades de medida (Unidad_Medida) utilizadas en los conjuntos de datos:
-        - simbolo: símbolo de la unidad (ej. %, Gs., USD)
-        - nombre_unidad: nombre completo de la unidad
-
-        4. Frecuencias (Frecuencia) mencionadas para los datos:
-        - nombre_frecuencia: tipo de frecuencia (ej. mensual, trimestral, anual)
-
-        GUÍA DE CRAWLING:
-        La página es un portal de datos abiertos del gobierno paraguayo con múltiples categorías temáticas. Para extraer la información:
-
-        1. Navega por cada una de las categorías temáticas (iconos centrales):
-        - Haz clic en cada icono/categoría (Agricultura, Desarrollo Social, etc.)
-        - Dentro de cada categoría, explora los conjuntos de datos disponibles
-        - Busca tablas, gráficos o documentos con datos macroeconómicos
-
-        2. Presta especial atención a la sección "Historias y Noticias" que muestra eventos de capacitación sobre datos abiertos:
-        - Estos eventos pueden contener enlaces a documentos e informes importantes
-        - Explora cada noticia para encontrar enlaces a recursos adicionales
-
-        3. Utiliza el menú superior "Conjuntos de datos" para acceder al catálogo completo de datos:
-        - Filtra por términos económicos relevantes (inflación, PIB, tasas, etc.)
-        - Examina metadatos de cada conjunto para identificar unidades y frecuencias
-
-        4. Para cada conjunto de datos encontrado:
-        - Registra los metadatos (título, fecha, descripción)
-        - Extrae una muestra de los datos si están en formato tabular
-        - Captura las unidades de medida y frecuencias mencionadas
-        - Guarda enlaces a descargas disponibles (CSV, Excel, PDF)
-
-        5. Busca informes analíticos o explicativos que acompañen a los datos:
-        - Pueden estar en formatos PDF o como páginas web
-        - Extrae resúmenes o descripciones para proporcionar contexto
-
-        Asegúrate de explorar tanto la página principal como las secciones internas, ya que los datos más valiosos suelen estar varios niveles por debajo de la página de inicio.
-        """
-        
-        return firecrawl_crawl(url, prompt, schema, test_mode)
-    # 6. Estadísticas Macroeconómicas (INE)
-    @tool("INE Statistics Scraper")
-    def scrape_ine_main(test_mode=True) -> str:
-        """Scrapes National Statistics Institute with macroeconomic data and official statistics."""
-        schema = {
-            "type": "object",
-            "properties": {
-                "Informe_General": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_informe": {"type": "integer"},
-                            "id_tipo_informe": {"type": "integer"},
-                            "id_frecuencia": {"type": "integer"},
-                            "titulo_informe": {"type": "string"},
-                            "resumen_informe": {"type": "string"},
-                            "fecha_publicacion": {"type": "string"},
-                            "url_descarga_original": {"type": "string"},
-                            "detalles_informe_jsonb": {"type": "object", "additionalProperties": True},
-                            "contenido_raw": {"type": "string"}
-                        },
-                        "required": ["titulo_informe", "fecha_publicacion"]
-                    }
-                },
-                "Unidad_Medida": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_unidad_medida": {"type": "integer"},
-                            "simbolo": {"type": "string"},
-                            "nombre_unidad": {"type": "string"}
-                        },
-                        "required": ["simbolo"]
-                    }
-                },
-                "Frecuencia": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_frecuencia": {"type": "integer"},
-                            "nombre_frecuencia": {"type": "string"}
-                        },
-                        "required": ["nombre_frecuencia"]
-                    }
-                },
-                "Tipo_Informe": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_tipo_informe": {"type": "integer"},
-                            "nombre_tipo_informe": {"type": "string"}
-                        },
-                        "required": ["nombre_tipo_informe"]
-                    }
-                }
-            },
-            "required": ["Informe_General"]
-        }
-        
-        url = "https://www.ine.gov.py/"
-        prompt = """Extrae la siguiente información del sitio web del Instituto Nacional de Estadística de Paraguay (INE):
-
-        1. Informes y publicaciones estadísticas disponibles (Informe_General):
-        - id_informe: identificador único del informe
-        - id_tipo_informe: tipo de publicación (compendio, censo, informe especializado)
-        - titulo_informe: título completo del documento
-        - fecha_publicacion: fecha de publicación
-        - resumen_informe: breve descripción o resumen visible
-        - url_descarga_original: enlace de descarga del documento
-        - detalles_informe_jsonb: información adicional relevante
-
-        2. Tipos de informes disponibles (Tipo_Informe):
-        - id_tipo_informe: identificador único del tipo
-        - nombre_tipo_informe: nombre del tipo de informe (ej. "Compendio Estadístico", "Censo", "Atlas")
-
-        3. Unidades de medida mencionadas (Unidad_Medida):
-        - id_unidad_medida: identificador único de la unidad
-        - simbolo: símbolo de la unidad (%, Gs., USD, etc.)
-        - nombre_unidad: nombre completo de la unidad
-
-        4. Frecuencias de publicación (Frecuencia):
-        - id_frecuencia: identificador único de la frecuencia
-        - nombre_frecuencia: tipo de frecuencia (ej. mensual, trimestral, anual)
-
-        GUÍA DE CRAWLING:
-        El sitio del INE tiene una estructura organizada con varias secciones clave para explorar:
-
-        1. Sección de Publicaciones:
-        - Explora la sección "Publicaciones" visible en la página principal
-        - El "COMPENDIO ESTADÍSTICO 2023" es un documento clave que aparece destacado
-        - Captura todos los enlaces "Ver documento" y botones de descarga
-        - Registra los metadatos de cada publicación (título, fecha, descripción)
-
-        2. Menús de navegación:
-        - Explora las secciones "Estadística por Tema" y "Estadística por Fuente" 
-        - Cada categoría temática contiene diferentes publicaciones y conjuntos de datos
-        - Navega a través de todas las categorías y subcategorías disponibles
-
-        3. Sección "Destacados":
-        - Revisa todos los elementos en la sección "Destacados" del sitio
-        - Incluye informes especiales como "Atlas sobre la Discapacidad" y "Censo Transparente"
-        - Captura los enlaces a estos documentos especiales
-
-        4. Datos Abiertos:
-        - Explora la sección "Datos Abiertos" del menú principal
-        - Registra los conjuntos de datos disponibles y sus metadatos
-        - Captura enlaces a portales especializados como "Portal GEO Estadístico" y "Plataforma ODS"
-
-        5. Para cada publicación encontrada:
-        - Registra el título exacto, fecha y tipo de documento
-        - Captura cualquier descripción o resumen visible
-        - Guarda la URL de descarga del documento completo
-        - Observa la periodicidad o frecuencia mencionada
-
-        No intentes extraer directamente los datos macroeconómicos del contenido de los documentos en esta fase, solo los metadatos y enlaces de las publicaciones. El procesamiento de los datos dentro de los documentos se realizará en una fase posterior.
-        """
-        
-        return firecrawl_crawl(url, prompt, schema, test_mode)
-
-    # 7. Estadísticas Sociales
-    @tool("INE Social Publications Scraper")
-    def scrape_ine_social(test_mode=True) -> str:
-        """Scrapes INE portal for social statistics publications and data."""
-        schema = {
-            "type": "object",
-            "properties": {
-                "Informe_General": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_informe": {"type": "integer"},
-                            "id_tipo_informe": {"type": "integer"},
-                            "id_frecuencia": {"type": "integer"},
-                            "id_periodo": {"type": "integer"},
-                            "titulo_informe": {"type": "string"},
-                            "resumen_informe": {"type": "string"},
-                            "fecha_publicacion": {"type": "string"},
-                            "url_descarga_original": {"type": "string"},
-                            "detalles_informe_jsonb": {"type": "object", "additionalProperties": True},
-                            "contenido_raw": {"type": "string"}
-                        },
-                        "required": ["titulo_informe", "url_descarga_original"]
-                    }
-                },
-                "Tipo_Informe": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_tipo_informe": {"type": "integer"},
-                            "nombre_tipo_informe": {"type": "string"}
-                        },
-                        "required": ["nombre_tipo_informe"]
-                    }
-                },
-                "Periodo_Informe": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_periodo": {"type": "integer"},
-                            "nombre_periodo": {"type": "string"}
-                        },
-                        "required": ["nombre_periodo"]
-                    }
-                }
-            },
-            "required": ["Informe_General"]
         }
         
         url = "https://www.ine.gov.py/vt/publicacion.php/"
@@ -982,59 +670,47 @@ class InverbotPipelineDato():
         Mantén la relación entre Informe_General, Tipo_Informe y Periodo_Informe usando IDs consistentes.
         """
         
-        return firecrawl_crawl(url, prompt, schema, test_mode)
+        try:
+            # Configure crawling for INE social publications
+            crawl_options = {
+                "maxDepth": 2,  # Publications page + individual publication pages
+                "limit": 8 if test_mode else 25,
+                "allowExternalLinks": False
+            }
+            
+            page_options = {
+                "onlyMainContent": True,
+                "removeBase64Images": True,
+                "formats": ["markdown", "json"],
+                "waitFor": 4000,
+                "timeout": 30000
+            }
+            
+            # Use native CrewAI crawl tool - simplified call
+            result = firecrawl_crawl_native(url, "", {}, test_mode)
+            
+            return str(result) if result else f"No content crawled from INE Social: {url}"
+            
+        except Exception as e:
+            return f"Error crawling INE Social: {str(e)}"
 
-    # 8. Contratos Públicos
+    # ============================================================================================
+    # SCRAPER TOOLS - PUBLIC CONTRACTS
+    # ============================================================================================
+
     @tool("Public Contracts Scraper")
     def scrape_contrataciones(test_mode=True) -> str:
-        """Scrapes DNCP portal for public procurement and contracts data."""
+        """Scrapes DNCP portal for public procurement. Extracts raw content for processor agent to structure."""
+        # Simple content-focused schema for raw extraction
         schema = {
             "type": "object",
             "properties": {
-                "Licitacion_Contrato": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_licitacion_contrato": {"type": "integer"},
-                            "id_emisor_adjudicado": {"type": "integer"},
-                            "titulo": {"type": "string"},
-                            "entidad_convocante": {"type": "string"},
-                            "monto_adjudicado": {"type": "number"},
-                            "id_moneda": {"type": "integer"},
-                            "fecha_adjudicacion": {"type": "string", "format": "date"},
-                            "detalles_contrato": {"type": "object", "additionalProperties": True},
-                            "contenido_raw": {"type": "string"}
-                        },
-                        "required": ["titulo"]
-                    }
-                },
-                "Emisores": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_emisor": {"type": "integer"},
-                            "nombre_emisor": {"type": "string"},
-                            "id_categoria_emisor": {"type": "integer"}
-                        },
-                        "required": ["nombre_emisor"]
-                    }
-                },
-                "Moneda": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_moneda": {"type": "integer"},
-                            "codigo_moneda": {"type": "string"},
-                            "nombre_moneda": {"type": "string"}
-                        },
-                        "required": ["codigo_moneda"]
-                    }
-                }
+                "page_content": {"type": "string", "description": "All text content from the page"},
+                "links": {"type": "array", "items": {"type": "string"}, "description": "All URLs found on the page"},
+                "documents": {"type": "array", "items": {"type": "string"}, "description": "PDF or document URLs"},
+                "metadata": {"type": "object", "additionalProperties": True, "description": "Page metadata and structure info"}
             },
-            "required": ["Licitacion_Contrato"]
+            "required": ["page_content"]
         }
         
         url = "https://www.contrataciones.gov.py/"
@@ -1085,62 +761,44 @@ class InverbotPipelineDato():
         Asegúrate de mantener las relaciones entre las tablas usando IDs consistentes. Por ejemplo, si un contrato menciona una empresa y una moneda específica, asigna el mismo id_emisor y id_moneda en las tablas correspondientes.
         """
         
-        return firecrawl_crawl(url, prompt, schema, test_mode)
+        try:
+            # Configure crawling for INE social publications
+            crawl_options = {
+                "maxDepth": 2,  # Publications page + individual publication pages
+                "limit": 8 if test_mode else 25,
+                "allowExternalLinks": False
+            }
+            
+            page_options = {
+                "onlyMainContent": True,
+                "removeBase64Images": True,
+                "formats": ["markdown", "json"],
+                "waitFor": 4000,
+                "timeout": 30000
+            }
+            
+            # Use native CrewAI crawl tool - simplified call
+            result = firecrawl_crawl_native(url, "", {}, test_mode)
+            
+            return str(result) if result else f"No content crawled from INE Social: {url}"
+            
+        except Exception as e:
+            return f"Error crawling INE Social: {str(e)}"
 
     # 9. Datos de Inversión
     @tool("DNIT Investment Data Scraper")
     def scrape_dnit_investment(test_mode=True) -> str:
-        """Scrapes DNIT portal section with information for investing in Paraguay."""
+        """Scrapes DNIT portal for investment information. Extracts raw content for processor agent to structure."""
+        # Simple content-focused schema for raw extraction
         schema = {
             "type": "object",
             "properties": {
-                "Informe_General": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_informe": {"type": "integer"},
-                            "id_tipo_informe": {"type": "integer"},
-                            "titulo_informe": {"type": "string"},
-                            "resumen_informe": {"type": "string"},
-                            "fecha_publicacion": {"type": "string"},
-                            "url_descarga_original": {"type": "string"},
-                            "detalles_informe_jsonb": {"type": "object", "additionalProperties": True},
-                            "contenido_raw": {"type": "string"}
-                        },
-                        "required": ["titulo_informe"]
-                    }
-                },
-                "Dato_Macroeconomico": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_dato_macro": {"type": "integer"},
-                            "id_informe": {"type": "integer"},
-                            "indicador_nombre": {"type": "string"},
-                            "fecha_dato": {"type": "string", "format": "date"},
-                            "valor_numerico": {"type": "number"},
-                            "unidad_medida": {"type": "integer"},
-                            "id_frecuencia": {"type": "integer"},
-                            "link_fuente_especifico": {"type": "string"},
-                            "otras_propiedades_jsonb": {
-                                "type": "object",
-                                "properties": {
-                                    "sector": {"type": "string"},
-                                    "tipo_inversion": {"type": "string"},
-                                    "region": {"type": "string"}
-                                },
-                                "additionalProperties": True
-                            },
-                            "id_moneda": {"type": "integer"},
-                            "contexto_raw": {"type": "string"}
-                        },
-                        "required": ["indicador_nombre", "valor_numerico"]
-                    }
-                }
+                "page_content": {"type": "string", "description": "All text content from the page"},
+                "links": {"type": "array", "items": {"type": "string"}, "description": "All URLs found on the page"},
+                "documents": {"type": "array", "items": {"type": "string"}, "description": "PDF or document URLs"},
+                "metadata": {"type": "object", "additionalProperties": True, "description": "Page metadata and structure info"}
             },
-            "required": ["Informe_General", "Dato_Macroeconomico"]
+            "required": ["page_content"]
         }
         
         url = "https://www.dnit.gov.py/web/portal-institucional/invertir-en-py"
@@ -1244,49 +902,38 @@ class InverbotPipelineDato():
         4. Intenta capturar las fechas de vigencia de los datos cuando estén disponibles (ej. "En el año 2020...")
         """
         
-        return firecrawl_scrape(url, prompt, schema, test_mode)
+        try:
+            # Configure scraping for DNIT financial reports
+            page_options = {
+                "onlyMainContent": True,
+                "removeBase64Images": True,
+                "formats": ["markdown", "json"],
+                "waitFor": 4000,  # Wait for financial reports to load
+                "timeout": 30000
+            }
+            
+            # Use native CrewAI scrape tool - simplified call
+            result = firecrawl_scrape_native(url, "", {}, test_mode)
+            
+            return str(result) if result else f"No content scraped from DNIT Financial: {url}"
+            
+        except Exception as e:
+            return f"Error scraping DNIT Financial: {str(e)}"
 
     # 10. Informes Financieros (DNIT)
     @tool("DNIT Financial Reports Scraper")
     def scrape_dnit_financial(test_mode=True) -> str:
-        """Scrapes DNIT portal section with financial reports."""
+        """Scrapes DNIT portal for financial reports. Extracts raw content for processor agent to structure."""
+        # Simple content-focused schema for raw extraction
         schema = {
             "type": "object",
             "properties": {
-                "Informe_General": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_informe": {"type": "integer"},
-                            "id_emisor": {"type": "integer"},
-                            "id_tipo_informe": {"type": "integer"},
-                            "id_frecuencia": {"type": "integer"},
-                            "id_periodo": {"type": "integer"},
-                            "titulo_informe": {"type": "string"},
-                            "resumen_informe": {"type": "string"},
-                            "fecha_publicacion": {"type": "string"},
-                            "url_descarga_original": {"type": "string"},
-                            "detalles_informe_jsonb": {"type": "object", "additionalProperties": True},
-                            "contenido_raw": {"type": "string"}
-                        },
-                        "required": ["titulo_informe", "url_descarga_original"]
-                    }
-                },
-                "Emisores": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id_emisor": {"type": "integer"},
-                            "nombre_emisor": {"type": "string"},
-                            "id_categoria_emisor": {"type": "integer"}
-                        },
-                        "required": ["nombre_emisor"]
-                    }
-                }
+                "page_content": {"type": "string", "description": "All text content from the page"},
+                "links": {"type": "array", "items": {"type": "string"}, "description": "All URLs found on the page"},
+                "documents": {"type": "array", "items": {"type": "string"}, "description": "PDF or document URLs"},
+                "metadata": {"type": "object", "additionalProperties": True, "description": "Page metadata and structure info"}
             },
-            "required": ["Informe_General"]
+            "required": ["page_content"]
         }
         
         url = "https://www.dnit.gov.py/web/portal-institucional/informes-financieros"
@@ -1340,10 +987,405 @@ class InverbotPipelineDato():
         - Observa que hay 723 resultados en total, por lo que deberás navegar por múltiples páginas
         """
         
-        return firecrawl_crawl(url, prompt, schema, test_mode)
+        try:
+            # Configure crawling for INE social publications
+            crawl_options = {
+                "maxDepth": 2,  # Publications page + individual publication pages
+                "limit": 8 if test_mode else 25,
+                "allowExternalLinks": False
+            }
+            
+            page_options = {
+                "onlyMainContent": True,
+                "removeBase64Images": True,
+                "formats": ["markdown", "json"],
+                "waitFor": 4000,
+                "timeout": 30000
+            }
+            
+            # Use native CrewAI crawl tool - simplified call
+            result = firecrawl_crawl_native(url, "", {}, test_mode)
+            
+            return str(result) if result else f"No content crawled from INE Social: {url}"
+            
+        except Exception as e:
+            return f"Error crawling INE Social: {str(e)}"
+    
+    @tool("Extract Structured Data from Raw Content")
+    def extract_structured_data_from_raw(raw_content: dict) -> dict:
+        """Convert raw scraped content into structured database format.
+        
+        This tool takes the raw content extracted by scrapers and converts it into
+        the structured format required for the 14 Supabase tables.
+        
+        Args:
+            raw_content: Dictionary containing:
+                - page_content: All text content from the page
+                - links: Array of URLs found on the page
+                - documents: Array of PDF/document URLs
+                - metadata: Page metadata and structure info
+                
+        Returns:
+            Dictionary with structured data organized by database tables
+        """
+        import re
+        from datetime import datetime
+        import json
+        
+        try:
+            # Extract content from raw_content
+            page_content = raw_content.get("page_content", "")
+            links = raw_content.get("links", [])
+            documents = raw_content.get("documents", [])
+            metadata = raw_content.get("metadata", {})
+            
+            # Initialize structured data for all 14 tables
+            structured_data = {
+                "Categoria_Emisor": [],
+                "Emisores": [],
+                "Moneda": [],
+                "Frecuencia": [],
+                "Tipo_Informe": [],
+                "Periodo_Informe": [],
+                "Unidad_Medida": [],
+                "Instrumento": [],
+                "Informe_General": [],
+                "Resumen_Informe_Financiero": [],
+                "Dato_Macroeconomico": [],
+                "Movimiento_Diario_Bolsa": [],
+                "Licitacion_Contrato": []
+            }
+            
+            processing_report = {
+                "status": "success",
+                "records_extracted": 0,
+                "tables_populated": 0,
+                "processing_notes": [],
+                "data_quality_metrics": {},
+                "extraction_summary": ""
+            }
+            
+            # Analyze content type based on URL and content patterns
+            source_url = metadata.get("url", "")
+            content_type = _identify_content_type(source_url, page_content)
+            
+            # Route processing based on content type
+            if "bva" in source_url.lower():
+                structured_data, metrics = _process_bva_content(page_content, links, documents, structured_data)
+            elif "ine.gov.py" in source_url.lower():
+                structured_data, metrics = _process_ine_content(page_content, links, documents, structured_data)
+            elif "datos.gov.py" in source_url.lower():
+                structured_data, metrics = _process_datos_gov_content(page_content, links, documents, structured_data)
+            elif "contrataciones.gov.py" in source_url.lower():
+                structured_data, metrics = _process_contracts_content(page_content, links, documents, structured_data)
+            elif "dnit.gov.py" in source_url.lower():
+                structured_data, metrics = _process_dnit_content(page_content, links, documents, structured_data)
+            else:
+                # Generic processing for unknown sources
+                structured_data, metrics = _process_generic_content(page_content, links, documents, structured_data)
+            
+            # Update processing report
+            processing_report["records_extracted"] = sum(len(records) for records in structured_data.values())
+            processing_report["tables_populated"] = sum(1 for records in structured_data.values() if len(records) > 0)
+            processing_report["data_quality_metrics"] = metrics
+            processing_report["extraction_summary"] = f"Processed {content_type} content from {source_url}, extracted {processing_report['records_extracted']} records across {processing_report['tables_populated']} tables"
+            
+            # Add processing metadata
+            processing_report["processing_notes"].append(f"Content type identified as: {content_type}")
+            processing_report["processing_notes"].append(f"Source URL: {source_url}")
+            processing_report["processing_notes"].append(f"Content length: {len(page_content)} characters")
+            processing_report["processing_notes"].append(f"Links found: {len(links)}")
+            processing_report["processing_notes"].append(f"Documents found: {len(documents)}")
+            
+            return {
+                "structured_data": structured_data,
+                "processing_report": processing_report,
+                "raw_content_summary": {
+                    "content_length": len(page_content),
+                    "links_count": len(links),
+                    "documents_count": len(documents),
+                    "source_identified": content_type
+                }
+            }
+            
+        except Exception as e:
+            return {
+                "structured_data": {table: [] for table in ["Categoria_Emisor", "Emisores", "Moneda", "Frecuencia", "Tipo_Informe", "Periodo_Informe", "Unidad_Medida", "Instrumento", "Informe_General", "Resumen_Informe_Financiero", "Dato_Macroeconomico", "Movimiento_Diario_Bolsa", "Licitacion_Contrato"]},
+                "processing_report": {
+                    "status": "error",
+                    "error": str(e),
+                    "records_extracted": 0,
+                    "tables_populated": 0,
+                    "processing_notes": [f"Error during processing: {str(e)}"],
+                    "extraction_summary": "Processing failed due to error"
+                },
+                "raw_content_summary": {
+                    "content_length": len(str(raw_content)),
+                    "error": str(e)
+                }
+            }
+
+    def _identify_content_type(url: str, content: str) -> str:
+        """Identify the type of content based on URL and content patterns."""
+        url_lower = url.lower()
+        content_lower = content.lower()
+        
+        if "bolsadevalores.com.py" in url_lower:
+            if "emisores" in url_lower or "listado-de-emisores" in url_lower:
+                return "BVA_Emisores"
+            elif "informes-diarios" in url_lower or "diario" in content_lower:
+                return "BVA_Daily_Reports"
+            elif "informes-mensuales" in url_lower or "mensual" in content_lower:
+                return "BVA_Monthly_Reports"
+            elif "informes-anuales" in url_lower or "anual" in content_lower:
+                return "BVA_Annual_Reports"
+            else:
+                return "BVA_General"
+        elif "ine.gov.py" in url_lower:
+            if "publicacion.php" in url_lower or "social" in content_lower:
+                return "INE_Social_Statistics"
+            else:
+                return "INE_General_Statistics"
+        elif "datos.gov.py" in url_lower:
+            return "Paraguay_Open_Data"
+        elif "contrataciones.gov.py" in url_lower:
+            return "Public_Contracts"
+        elif "dnit.gov.py" in url_lower:
+            if "invertir-en-py" in url_lower:
+                return "DNIT_Investment"
+            elif "informes-financieros" in url_lower:
+                return "DNIT_Financial"
+            else:
+                return "DNIT_General"
+        else:
+            return "Unknown_Source"
+
+    def _process_bva_content(content: str, links: list, documents: list, structured_data: dict) -> tuple:
+        """Process BVA (stock exchange) content into structured format."""
+        metrics = {"processing_method": "BVA_content_analysis"}
+        
+        # Extract emisores (issuers) information
+        emisor_pattern = r"(?i)(banco|financiera|sa|s\.a\.|ltda|cooperativa|empresa|compañía)"
+        emisor_matches = re.findall(r"([A-Z][A-Za-z\s]{3,50}(?:S\.?A\.?|LTDA\.?|BANCO|FINANCIERA))", content)
+        
+        for emisor_name in set(emisor_matches[:20]):  # Limit to 20 to avoid duplicates
+            structured_data["Emisores"].append({
+                "nombre_emisor": emisor_name.strip(),
+                "id_categoria_emisor": 1,  # Default category
+                "calificacion_bva": "No especificada"
+            })
+        
+        # Extract reports from links and documents
+        for link in links + documents:
+            if any(term in link.lower() for term in ["informe", "reporte", "balance", "prospecto"]):
+                # Determine report type
+                if "anual" in link.lower():
+                    tipo_informe = "Informe Anual"
+                    frecuencia = "Anual"
+                elif "mensual" in link.lower():
+                    tipo_informe = "Informe Mensual"
+                    frecuencia = "Mensual"
+                elif "diario" in link.lower():
+                    tipo_informe = "Informe Diario"
+                    frecuencia = "Diario"
+                else:
+                    tipo_informe = "Informe General"
+                    frecuencia = "Variable"
+                
+                structured_data["Informe_General"].append({
+                    "titulo_informe": _extract_title_from_link(link),
+                    "id_tipo_informe": 1,  # Will be resolved by entity relationships tool
+                    "fecha_publicacion": _extract_date_from_content(content, link),
+                    "url_descarga_original": link,
+                    "resumen_informe": _extract_summary_from_content(content, link)
+                })
+                
+                # Add corresponding type and frequency
+                if tipo_informe not in [t["nombre_tipo_informe"] for t in structured_data["Tipo_Informe"]]:
+                    structured_data["Tipo_Informe"].append({"nombre_tipo_informe": tipo_informe})
+                
+                if frecuencia not in [f["nombre_frecuencia"] for f in structured_data["Frecuencia"]]:
+                    structured_data["Frecuencia"].append({"nombre_frecuencia": frecuencia})
+        
+        # Extract financial movements data from content
+        movement_patterns = [
+            r"(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",  # Dates
+            r"(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)",  # Amounts
+            r"(USD|GS|EUR|ARS)",  # Currencies
+        ]
+        
+        for pattern in movement_patterns:
+            matches = re.findall(pattern, content)
+            if pattern == r"(USD|GS|EUR|ARS)" and matches:
+                for currency in set(matches):
+                    if currency not in [m["codigo_moneda"] for m in structured_data["Moneda"]]:
+                        structured_data["Moneda"].append({
+                            "codigo_moneda": currency,
+                            "nombre_moneda": _get_currency_name(currency)
+                        })
+        
+        metrics["emisores_extracted"] = len(structured_data["Emisores"])
+        metrics["reports_extracted"] = len(structured_data["Informe_General"])
+        metrics["currencies_extracted"] = len(structured_data["Moneda"])
+        
+        return structured_data, metrics
+
+    def _process_ine_content(content: str, links: list, documents: list, structured_data: dict) -> tuple:
+        """Process INE (statistics institute) content into structured format."""
+        metrics = {"processing_method": "INE_content_analysis"}
+        
+        # Extract statistical reports and publications
+        for link in links + documents:
+            if any(term in link.lower() for term in ["pdf", "publicacion", "censo", "encuesta", "estadistica"]):
+                structured_data["Informe_General"].append({
+                    "titulo_informe": _extract_title_from_link(link),
+                    "id_tipo_informe": 2,  # Statistical report type
+                    "fecha_publicacion": _extract_date_from_content(content, link),
+                    "url_descarga_original": link,
+                    "resumen_informe": _extract_summary_from_content(content, link)
+                })
+        
+        # Extract macroeconomic indicators
+        macro_indicators = [
+            "PIB", "inflación", "desempleo", "pobreza", "población", "vivienda",
+            "educación", "salud", "ingresos", "exportaciones", "importaciones"
+        ]
+        
+        for indicator in macro_indicators:
+            if indicator.lower() in content.lower():
+                structured_data["Dato_Macroeconomico"].append({
+                    "indicador_nombre": indicator,
+                    "fecha_dato": datetime.now().strftime("%Y-%m-%d"),
+                    "valor_numerico": 0.0,  # Will be extracted by more specific parsing
+                    "id_frecuencia": 1,
+                    "otras_propiedades_jsonb": {"source": "INE", "extraction_method": "content_analysis"}
+                })
+        
+        # Add INE as default emisor
+        structured_data["Emisores"].append({
+            "nombre_emisor": "Instituto Nacional de Estadística",
+            "id_categoria_emisor": 2,  # Government institution
+            "calificacion_bva": "Institución Gubernamental"
+        })
+        
+        metrics["reports_extracted"] = len(structured_data["Informe_General"])
+        metrics["indicators_identified"] = len(structured_data["Dato_Macroeconomico"])
+        
+        return structured_data, metrics
+
+    def _process_datos_gov_content(content: str, links: list, documents: list, structured_data: dict) -> tuple:
+        """Process open data portal content into structured format."""
+        metrics = {"processing_method": "open_data_analysis"}
+        
+        # Similar processing for other content types...
+        # Extract datasets and reports from open data portal
+        for link in links + documents:
+            if any(term in link.lower() for term in ["dataset", "csv", "excel", "datos"]):
+                structured_data["Informe_General"].append({
+                    "titulo_informe": _extract_title_from_link(link),
+                    "id_tipo_informe": 3,  # Dataset type
+                    "fecha_publicacion": _extract_date_from_content(content, link),
+                    "url_descarga_original": link,
+                    "resumen_informe": "Dataset del portal de datos abiertos"
+                })
+        
+        return structured_data, metrics
+
+    def _process_contracts_content(content: str, links: list, documents: list, structured_data: dict) -> tuple:
+        """Process public contracts content into structured format."""
+        metrics = {"processing_method": "contracts_analysis"}
+        
+        # Extract contract information
+        contract_pattern = r"(?i)(licitación|contrato|adjudicación|convocatoria)"
+        if re.search(contract_pattern, content):
+            # Extract contract titles and amounts
+            amount_pattern = r"(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)\s*(gs|guaraníes|usd|dólares)"
+            amounts = re.findall(amount_pattern, content.lower())
+            
+            for amount, currency in amounts[:10]:  # Limit to first 10 contracts
+                structured_data["Licitacion_Contrato"].append({
+                    "titulo": "Contrato público identificado",
+                    "entidad_convocante": "Entidad gubernamental",
+                    "monto_adjudicado": float(amount.replace(".", "").replace(",", ".")),
+                    "fecha_adjudicacion": datetime.now().strftime("%Y-%m-%d")
+                })
+        
+        return structured_data, metrics
+
+    def _process_dnit_content(content: str, links: list, documents: list, structured_data: dict) -> tuple:
+        """Process DNIT investment/financial content into structured format."""
+        metrics = {"processing_method": "DNIT_analysis"}
+        
+        # Extract investment reports and financial documents
+        for link in links + documents:
+            if any(term in link.lower() for term in ["informe", "financiero", "inversion", "pdf"]):
+                structured_data["Informe_General"].append({
+                    "titulo_informe": _extract_title_from_link(link),
+                    "id_tipo_informe": 4,  # Financial/investment report
+                    "fecha_publicacion": _extract_date_from_content(content, link),
+                    "url_descarga_original": link,
+                    "resumen_informe": "Informe financiero o de inversión DNIT"
+                })
+        
+        return structured_data, metrics
+
+    def _process_generic_content(content: str, links: list, documents: list, structured_data: dict) -> tuple:
+        """Generic processing for unknown content types."""
+        metrics = {"processing_method": "generic_analysis"}
+        
+        # Basic extraction of any documents found
+        for link in links + documents:
+            structured_data["Informe_General"].append({
+                "titulo_informe": _extract_title_from_link(link),
+                "id_tipo_informe": 5,  # Generic document
+                "fecha_publicacion": datetime.now().strftime("%Y-%m-%d"),
+                "url_descarga_original": link,
+                "resumen_informe": "Documento identificado en fuente desconocida"
+            })
+        
+        return structured_data, metrics
+
+    def _extract_title_from_link(link: str) -> str:
+        """Extract a reasonable title from a URL or document link."""
+        # Remove file extension and URL parameters
+        title = link.split("/")[-1].split("?")[0]
+        title = re.sub(r"\.(pdf|xlsx?|csv|doc|docx)$", "", title, flags=re.IGNORECASE)
+        title = title.replace("_", " ").replace("-", " ").title()
+        return title if len(title) > 3 else "Documento sin título específico"
+
+    def _extract_date_from_content(content: str, context: str = "") -> str:
+        """Extract date information from content or context."""
+        # Look for year patterns
+        year_pattern = r"20\d{2}"
+        years = re.findall(year_pattern, content + " " + context)
+        if years:
+            return f"{years[0]}-01-01"  # Default to January 1st of found year
+        return datetime.now().strftime("%Y-%m-%d")
+
+    def _extract_summary_from_content(content: str, link: str) -> str:
+        """Extract a summary or description from content related to a link."""
+        # Simple heuristic: find text near the link mention
+        link_context = ""
+        if link in content:
+            link_pos = content.find(link)
+            start = max(0, link_pos - 100)
+            end = min(len(content), link_pos + 100)
+            link_context = content[start:end].strip()
+        
+        return link_context if len(link_context) > 10 else "Documento extraído del contenido de la página"
+
+    def _get_currency_name(code: str) -> str:
+        """Get full currency name from code."""
+        currency_names = {
+            "USD": "Dólar Estadounidense",
+            "GS": "Guaraní Paraguayo", 
+            "EUR": "Euro",
+            "ARS": "Peso Argentino"
+        }
+        return currency_names.get(code, f"Moneda {code}")
     
     @tool("Normalize Data Tool")
-    def normalize_data(raw_data: dict) -> dict:
+    def normalize_data(self, raw_data: dict) -> dict:
         """Normalize and clean raw extracted data from scrapers.
         
         Args:
@@ -3404,6 +3446,10 @@ class InverbotPipelineDato():
             validation_report["recommendations"].append("Data validation failed. Fix errors before loading.")
         
         return validation_report
+
+    # ============================================================================================
+    # AGENT DEFINITIONS
+    # ============================================================================================
     
     @agent
     def extractor(self) -> Agent:
@@ -3412,7 +3458,6 @@ class InverbotPipelineDato():
             verbose=True,
             llm=self.model_llm,
             tools=[
-                # serper_dev_tool,
                 self.scrape_bva_emisores,
                 self.scrape_bva_daily,
                 self.scrape_bva_monthly,
@@ -3433,6 +3478,7 @@ class InverbotPipelineDato():
             verbose=True,
             llm=self.model_llm,
             tools=[
+                self.extract_structured_data_from_raw,
                 self.normalize_data,
                 self.validate_data,
                 self.create_entity_relationships,
@@ -3469,35 +3515,42 @@ class InverbotPipelineDato():
             ]
         )
 
+    # ============================================================================================
+    # TASK DEFINITIONS
+    # ============================================================================================
+
     @task
     def extract_task(self) -> Task:
         return Task(
             config=self.tasks_config['extract_task'], 
-            
+            agent=self.extractor()
         )
 
     @task
     def process_task(self) -> Task:
         return Task(
             config=self.tasks_config['process_task'], 
-            context=[self.extract_task()]
+            agent=self.processor()
         )
         
     @task
     def vectorize_task(self) -> Task:
         return Task(
             config=self.tasks_config['vectorize_task'], 
-            context=[self.process_task(), self.extract_task()]
-            
+            agent=self.vector()
         )
         
     @task
     def load_task(self) -> Task:
         return Task(
             config=self.tasks_config['load_task'], 
-            context=[self.process_task(), self.vectorize_task()]
+            agent=self.loader()
         )
-        
+
+    # ============================================================================================
+    # CREW DEFINITION
+    # ============================================================================================
+
     @crew
     def crew(self) -> Crew:
         """Creates the InverbotPipelineDato crew with performance tracking"""

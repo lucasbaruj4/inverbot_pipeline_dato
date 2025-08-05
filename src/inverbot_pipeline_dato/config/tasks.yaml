@@ -1,107 +1,122 @@
 extract_task:
   description: >
-    Comprehensive data extraction from all 10 Paraguayan financial data sources using specialized scraping tools.
-    Each tool targets specific data sources and extracts structured information for the InverBot ETL pipeline.
+    Comprehensive raw content extraction from all 10 Paraguayan financial data sources using specialized scraping tools.
+    Each tool captures complete, unstructured content for intelligent processing by downstream agents.
+    
+    NEW ARCHITECTURE: Raw Content Extraction Strategy
+    Instead of complex structured extraction, focus on comprehensive content capture:
+    - Gather ALL page text, headings, and content without structuring
+    - Capture ALL links and document URLs for comprehensive coverage
+    - Extract metadata about page structure and navigation elements
+    - Let the Processor Agent handle intelligent data structuring
     
     Tool Usage Sequence:
     1. **BVA Sources** (4 tools):
-       - scrape_bva_emisores: Extract company/entity information and categories
-       - scrape_bva_daily: Daily market movements and transactions
-       - scrape_bva_monthly: Monthly market summaries and volumes
-       - scrape_bva_annual: Annual reports and comprehensive financial data
+       - scrape_bva_emisores: Raw content from company listings and entity pages
+       - scrape_bva_daily: Raw content from daily market reports and data
+       - scrape_bva_monthly: Raw content from monthly summaries and volumes
+       - scrape_bva_annual: Raw content from annual report pages
     
     2. **Government Data** (3 tools):
-       - scrape_datos_gov: Open government datasets and statistics
-       - scrape_ine_main: National statistics institute main indicators
-       - scrape_ine_social: Social and demographic statistics
+       - scrape_datos_gov: Raw content from open government data portal
+       - scrape_ine_main: Raw content from national statistics institute
+       - scrape_ine_social: Raw content from social statistics publications
     
     3. **Contracts & Investment** (3 tools):
-       - scrape_contrataciones: Public procurement and contract awards
-       - scrape_dnit_investment: Foreign investment reports and data
-       - scrape_dnit_financial: Financial sector regulatory reports
+       - scrape_contrataciones: Raw content from public procurement portal
+       - scrape_dnit_investment: Raw content from investment information pages
+       - scrape_dnit_financial: Raw content from financial regulatory reports
     
-    Extraction Strategy:
+    Content Capture Strategy:
     - Begin with test_mode=True for validation (limited credit usage)
-    - Extract metadata first: titles, URLs, publication dates, entity names
-    - Capture structured data: financial metrics, market movements, macro indicators
-    - Identify PDF documents and complex content for vector processing
-    - Maintain entity relationships using consistent naming conventions
-    - Handle pagination and dynamic content appropriately
+    - Prioritize comprehensive content gathering over data structuring
+    - Capture complete page text including navigation, forms, and tables
+    - Collect all links especially PDF and document download links
+    - Gather page metadata for source identification and processing hints
+    - Handle pagination and dynamic content to maximize content coverage
     
     Quality Requirements:
-    - Validate data completeness and format consistency
-    - Ensure entity relationships are properly captured
-    - Report any extraction errors or limitations
-    - Provide URLs for documents requiring further PDF processing
+    - Ensure complete content capture without truncation
+    - Validate that all links and documents are properly extracted
+    - Report any scraping errors or access limitations
+    - Provide rich metadata for intelligent downstream processing
     
-    Output feeds both processor (structured data) and vector (document content) agents.
+    Output provides raw content for Processor Agent to intelligently structure into database format.
   expected_output: >
-    Comprehensive JSON structure organized by data source and entity type:
+    Raw content structure organized by data source with comprehensive content capture:
     {
-      "bva_data": {
-        "Emisores": [{"nombre_emisor": str, "id_categoria_emisor": int, "calificacion_bva": str}],
-        "Movimiento_Diario_Bolsa": [{"fecha_operacion": date, "id_instrumento": int, "precio_operacion": decimal}],
-        "Informe_General": [{"titulo_informe": str, "url_descarga_original": str, "fecha_publicacion": date}]
+      "bva_sources": {
+        "emisores_content": {"page_content": str, "links": [str], "documents": [str], "metadata": dict},
+        "daily_content": {"page_content": str, "links": [str], "documents": [str], "metadata": dict},
+        "monthly_content": {"page_content": str, "links": [str], "documents": [str], "metadata": dict},
+        "annual_content": {"page_content": str, "links": [str], "documents": [str], "metadata": dict}
       },
-      "government_data": {
-        "Dato_Macroeconomico": [{"indicador_nombre": str, "fecha_dato": date, "valor_numerico": decimal}],
-        "Informe_General": [{"titulo_informe": str, "id_tipo_informe": int, "resumen_informe": text}]
+      "government_sources": {
+        "datos_gov_content": {"page_content": str, "links": [str], "documents": [str], "metadata": dict},
+        "ine_main_content": {"page_content": str, "links": [str], "documents": [str], "metadata": dict},
+        "ine_social_content": {"page_content": str, "links": [str], "documents": [str], "metadata": dict}
       },
-      "contracts_investment": {
-        "Licitacion_Contrato": [{"titulo": str, "entidad_convocante": str, "monto_adjudicado": decimal}],
-        "Informe_General": [{"titulo_informe": str, "url_descarga_original": str}]
+      "contracts_investment_sources": {
+        "contracts_content": {"page_content": str, "links": [str], "documents": [str], "metadata": dict},
+        "dnit_investment_content": {"page_content": str, "links": [str], "documents": [str], "metadata": dict},
+        "dnit_financial_content": {"page_content": str, "links": [str], "documents": [str], "metadata": dict}
       },
-      "pdf_documents": ["url1.pdf", "url2.pdf"],
       "extraction_summary": {
-        "total_records": int,
-        "sources_processed": [str],
-        "errors": [str]
+        "total_sources_processed": int, "content_length_total": int, "links_found_total": int, "documents_found_total": int
       }
     }
-  agent: extractor
+
   output_file: 'output/try_1/raw_extraction_output.txt'
 
 process_task:
   description: >
-    Process raw extracted data through a comprehensive 5-stage pipeline to create production-ready structured data
-    for all 14 Supabase tables. Each tool in the sequence builds upon the previous stage's output.
+    Process raw extracted content through a comprehensive 6-stage pipeline to create production-ready structured data
+    for all 14 Supabase tables. NEW ARCHITECTURE: First stage intelligently converts raw content to structured format.
     
     Sequential Tool Workflow:
     
-    1. **normalize_data** - Data Cleaning & Standardization
-       - Input: Raw extracted data from 'raw_extraction_output.txt'
+    1. **extract_structured_data_from_raw** - Intelligent Content Structuring [NEW]
+       - Input: Raw content from extractor (page_content, links, documents, metadata)
+       - Analyze content type based on source URL and content patterns
+       - Intelligently extract structured data from unstructured text
+       - Route processing based on source (BVA, INE, DNIT, contracts, etc.)
+       - Convert raw content into preliminary database record format
+       - Output: Structured data organized by 14 database tables
+    
+    2. **normalize_data** - Data Cleaning & Standardization
+       - Input: Structured data from step 1
        - Clean HTML artifacts, special characters, encoding issues
        - Standardize date formats (YYYY-MM-DD), number formats (decimal)
        - Convert string numbers to proper numeric types
        - Handle missing values and data type inconsistencies
        - Output: Clean, normalized data dictionary
     
-    2. **validate_data** - Schema Validation
-       - Input: Normalized data from step 1
+    3. **validate_data** - Schema Validation
+       - Input: Normalized data from step 2
        - Validate against all 14 Supabase table schemas
        - Check data types, field lengths, required constraints
        - Validate foreign key references and relationships
        - Separate valid data from invalid entries with error reporting
        - Output: Validated data + validation error report
     
-    3. **create_entity_relationships** - Relationship Building
-       - Input: Validated data from step 2
+    4. **create_entity_relationships** - Relationship Building
+       - Input: Validated data from step 3
        - Resolve entity names to proper IDs (emisor names → id_emisor)
        - Create master entities first (Categoria_Emisor, Moneda, etc.)
        - Establish foreign key relationships across all tables
        - Handle missing references with appropriate defaults
        - Output: Data with complete entity relationships
     
-    4. **structure_extracted_data** - Final Organization
-       - Input: Data with relationships from step 3
+    5. **structure_extracted_data** - Final Organization
+       - Input: Data with relationships from step 4
        - Organize data by target Supabase tables
        - Apply loading priorities (master tables first)
        - Create optimized batches for bulk loading
        - Add loading metadata and recommendations
        - Output: Production-ready structured data
     
-    5. **filter_duplicate_data** - Duplicate Prevention
-       - Input: Structured data from step 4
+    6. **filter_duplicate_data** - Duplicate Prevention
+       - Input: Structured data from step 5
        - Check existing Supabase data to prevent duplicates
        - Use table-specific unique field combinations
        - Filter out existing records, keep only new data
@@ -143,7 +158,7 @@ process_task:
         "data_quality_score": float
       }
     }
-  agent: processor
+
   context: [extract_task]
   output_file: 'output/try_1/structured_data_output.txt'
 
@@ -264,7 +279,7 @@ vectorize_task:
     }
   context: [process_task, extract_task]
   output_file: 'output/try_1/vector_data_output.txt'
-  agent: vector
+
 
 load_task:
   description: >
@@ -376,6 +391,6 @@ load_task:
         "overall_pipeline_status": "SUCCESS|PARTIAL|FAILED"
       }
     }
-  agent: loader
+
   context: [process_task, vectorize_task]
   output_file: 'output/try_1/loading_results_output.txt'
