@@ -16,6 +16,7 @@ from crewai import Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, crew, task
 from crewai.agents.agent_builder.base_agent import BaseAgent
 from crewai.tools import tool
+from crewai_tools import FirecrawlScrapeWebsiteTool, FirecrawlCrawlWebsiteTool
 
 # External Dependencies
 import requests
@@ -23,6 +24,7 @@ from supabase import create_client, Client
 from pinecone import Pinecone
 from dotenv import load_dotenv
 from firecrawl import FirecrawlApp
+import uuid
 
 # Load environment variables from .env.local or .env
 if os.path.exists(".env.local"):
@@ -54,6 +56,10 @@ def get_firecrawl_app():
         firecrawl_app = FirecrawlApp(api_key=api_key)
     return firecrawl_app
 
+# CrewAI Native Tool Instances (reusable across scrapers)
+scrape_tool = FirecrawlScrapeWebsiteTool()
+crawl_tool = FirecrawlCrawlWebsiteTool()
+
 # serper_dev_tool = SerperDevTool()
 
 
@@ -75,20 +81,47 @@ def firecrawl_scrape_native(url, prompt, schema, test_mode=True):
             timeout=timeout
         )
         
-        # Extract content from response
-        if hasattr(result, 'data') and result.data:
-            if hasattr(result.data, 'markdown') and result.data.markdown:
-                return result.data.markdown
-            elif hasattr(result.data, 'content') and result.data.content:
-                return result.data.content
+        # Extract content from response - handle both dict and object
+        if isinstance(result, dict):
+            # Dictionary response
+            if 'data' in result and result['data']:
+                data = result['data']
+                if isinstance(data, dict):
+                    if 'markdown' in data and data['markdown']:
+                        return data['markdown']
+                    elif 'content' in data and data['content']:
+                        return data['content']
+                    else:
+                        return str(data)
+                else:
+                    # data is an object
+                    if hasattr(data, 'markdown') and data.markdown:
+                        return data.markdown
+                    elif hasattr(data, 'content') and data.content:
+                        return data.content
+                    else:
+                        return str(data)
+            elif 'markdown' in result:
+                return result['markdown']
+            elif 'content' in result:
+                return result['content']
             else:
-                return str(result.data)
-        elif hasattr(result, 'markdown'):
-            return result.markdown
-        elif hasattr(result, 'content'):
-            return result.content
+                return str(result) if result else f"No content extracted from {url}"
         else:
-            return str(result) if result else f"No content extracted from {url}"
+            # Object response
+            if hasattr(result, 'data') and result.data:
+                if hasattr(result.data, 'markdown') and result.data.markdown:
+                    return result.data.markdown
+                elif hasattr(result.data, 'content') and result.data.content:
+                    return result.data.content
+                else:
+                    return str(result.data)
+            elif hasattr(result, 'markdown'):
+                return result.markdown
+            elif hasattr(result, 'content'):
+                return result.content
+            else:
+                return str(result) if result else f"No content extracted from {url}"
             
     except Exception as e:
         return f"Error with Firecrawl scraper: {str(e)}"
@@ -125,21 +158,59 @@ def firecrawl_crawl_native(url, prompt, schema, test_mode=True):
         print(f"🔄 Crawl job started. Waiting for completion...")
         
         # If we get immediate data, return it
-        if hasattr(crawl_response, 'data') and crawl_response.data:
-            print(f"✅ Crawl completed immediately with {len(crawl_response.data)} pages")
-            return format_crawl_results(crawl_response.data)
+        if isinstance(crawl_response, dict):
+            # Handle dictionary response
+            if 'data' in crawl_response and crawl_response['data']:
+                print(f"✅ Crawl completed immediately with {len(crawl_response['data'])} pages")
+                return format_crawl_results(crawl_response['data'])
+            elif 'id' in crawl_response:
+                job_id = crawl_response['id']
+            else:
+                return f"Unexpected response format from Firecrawl: {crawl_response}"
+        else:
+            # Handle object response
+            if hasattr(crawl_response, 'data') and crawl_response.data:
+                print(f"✅ Crawl completed immediately with {len(crawl_response.data)} pages")
+                return format_crawl_results(crawl_response.data)
+            elif hasattr(crawl_response, 'id'):
+                job_id = crawl_response.id
+            else:
+                return f"Unexpected response format from Firecrawl: {crawl_response}"
         
-        # If we get a job ID, poll for completion
-        if hasattr(crawl_response, 'id'):
-            job_id = crawl_response.id
-            print(f"📋 Got job ID: {job_id}. Polling for results...")
-            
-            start_time = time.time()
-            while time.time() - start_time < max_wait_time:
-                try:
-                    # Check job status
-                    status = app.check_crawl_status(job_id)
-                    
+        print(f"📋 Got job ID: {job_id}. Polling for results...")
+        
+        start_time = time.time()
+        while time.time() - start_time < max_wait_time:
+            try:
+                # Check job status
+                status = app.check_crawl_status(job_id)
+                
+                # Handle both dict and object responses for status
+                if isinstance(status, dict):
+                    # Dictionary response
+                    if 'status' in status:
+                        current_status = status['status']
+                        print(f"🔍 Crawl status: {current_status}")
+                        
+                        if current_status == 'completed':
+                            if 'data' in status and status['data']:
+                                print(f"✅ Crawl completed with {len(status['data'])} pages")
+                                return format_crawl_results(status['data'])
+                            else:
+                                print("⚠️ Crawl completed but no data returned")
+                                return f"Crawl completed but no data was extracted from {url}"
+                        
+                        elif current_status == 'failed':
+                            error_msg = status.get('error', 'Unknown error')
+                            print(f"❌ Crawl failed: {error_msg}")
+                            return f"Crawl failed for {url}: {error_msg}"
+                        
+                        elif current_status in ['pending', 'running']:
+                            print(f"⏳ Crawl in progress... waiting {poll_interval}s")
+                            time.sleep(poll_interval)
+                            continue
+                else:
+                    # Object response
                     if hasattr(status, 'status'):
                         print(f"🔍 Crawl status: {status.status}")
                         
@@ -164,10 +235,10 @@ def firecrawl_crawl_native(url, prompt, schema, test_mode=True):
                     # If status doesn't have expected format, wait and retry
                     time.sleep(poll_interval)
                     
-                except Exception as status_error:
-                    print(f"⚠️ Error checking status: {status_error}")
-                    time.sleep(poll_interval)
-                    continue
+            except Exception as status_error:
+                print(f"⚠️ Error checking status: {status_error}")
+                time.sleep(poll_interval)
+                continue
             
             # Timeout reached
             print(f"⏰ Crawl timeout reached ({max_wait_time}s)")
@@ -2497,6 +2568,140 @@ class InverbotPipelineDato():
         except Exception as e:
             return {"error": f"Error in PDF text extraction: {str(e)}", "pdf_url": pdf_url}
 
+    @tool("Extract Text from Excel Tool")
+    def extract_text_from_excel(self, excel_url: str) -> dict:
+        """Extract text content from Excel files (.xlsx, .xls).
+        
+        Args:
+            excel_url: URL or file path to the Excel document
+            
+        Returns:
+            dict: Extraction results with text content, metadata, and processing report
+        """
+        try:
+            import openpyxl
+            import requests
+            import io
+            import tempfile
+        except ImportError:
+            return {"error": "openpyxl not installed. Please install with: pip install openpyxl"}
+        
+        extraction_result = {
+            "extracted_text": "",
+            "metadata": {
+                "source_url": excel_url,
+                "sheet_count": 0,
+                "extraction_method": "openpyxl",
+                "file_size_kb": 0,
+                "extraction_errors": []
+            },
+            "sheets": [],
+            "report": {
+                "success": False,
+                "total_characters": 0,
+                "sheets_processed": 0,
+                "sheets_with_data": 0,
+                "processing_time": 0
+            }
+        }
+        
+        import time
+        start_time = time.time()
+        
+        try:
+            # Download Excel if it's a URL
+            excel_data = None
+            if excel_url.startswith(('http://', 'https://')):
+                try:
+                    response = requests.get(excel_url, timeout=30)
+                    response.raise_for_status()
+                    excel_data = io.BytesIO(response.content)
+                    extraction_result["metadata"]["file_size_kb"] = len(response.content) // 1024
+                except Exception as e:
+                    extraction_result["metadata"]["extraction_errors"].append(f"Download failed: {str(e)}")
+                    return extraction_result
+            else:
+                # Local file
+                try:
+                    with open(excel_url, 'rb') as f:
+                        excel_data = io.BytesIO(f.read())
+                    import os
+                    extraction_result["metadata"]["file_size_kb"] = os.path.getsize(excel_url) // 1024
+                except Exception as e:
+                    extraction_result["metadata"]["extraction_errors"].append(f"File read failed: {str(e)}")
+                    return extraction_result
+            
+            # Load workbook
+            try:
+                workbook = openpyxl.load_workbook(excel_data, data_only=True)
+                extraction_result["metadata"]["sheet_count"] = len(workbook.worksheets)
+            except Exception as e:
+                extraction_result["metadata"]["extraction_errors"].append(f"Workbook load failed: {str(e)}")
+                return extraction_result
+            
+            # Extract text from all sheets
+            all_text = []
+            for sheet in workbook.worksheets:
+                sheet_data = {
+                    "sheet_name": sheet.title,
+                    "text_content": "",
+                    "row_count": 0,
+                    "col_count": 0,
+                    "errors": []
+                }
+                
+                try:
+                    sheet_text = []
+                    max_row = sheet.max_row or 0
+                    max_col = sheet.max_column or 0
+                    sheet_data["row_count"] = max_row
+                    sheet_data["col_count"] = max_col
+                    
+                    # Extract all cell values
+                    for row in sheet.iter_rows():
+                        row_text = []
+                        for cell in row:
+                            if cell.value is not None:
+                                try:
+                                    cell_text = str(cell.value).strip()
+                                    if cell_text:
+                                        row_text.append(cell_text)
+                                except Exception as e:
+                                    sheet_data["errors"].append(f"Cell extraction error: {str(e)}")
+                        
+                        if row_text:
+                            sheet_text.append(" | ".join(row_text))
+                    
+                    sheet_content = "\n".join(sheet_text)
+                    sheet_data["text_content"] = sheet_content
+                    
+                    if sheet_content.strip():
+                        extraction_result["report"]["sheets_with_data"] += 1
+                        all_text.append(f"=== Sheet: {sheet.title} ===\n{sheet_content}")
+                    
+                    extraction_result["report"]["sheets_processed"] += 1
+                    
+                except Exception as e:
+                    error_msg = f"Sheet '{sheet.title}' processing failed: {str(e)}"
+                    sheet_data["errors"].append(error_msg)
+                    extraction_result["metadata"]["extraction_errors"].append(error_msg)
+                
+                extraction_result["sheets"].append(sheet_data)
+            
+            # Combine all text
+            full_text = "\n\n".join(all_text)
+            extraction_result["extracted_text"] = full_text
+            extraction_result["report"]["total_characters"] = len(full_text)
+            extraction_result["report"]["processing_time"] = time.time() - start_time
+            extraction_result["report"]["success"] = len(full_text) > 0
+            
+            return extraction_result
+            
+        except Exception as e:
+            extraction_result["metadata"]["extraction_errors"].append(f"General processing error: {str(e)}")
+            extraction_result["report"]["processing_time"] = time.time() - start_time
+            return extraction_result
+
     @tool("Chunk Document Tool")
     def chunk_document(text_content: str, chunk_size: int = 1200, overlap: int = 200) -> dict:
         """Split document text into overlapping chunks for vectorization.
@@ -3495,6 +3700,7 @@ class InverbotPipelineDato():
             llm=self.model_llm,
             tools=[
                 self.extract_text_from_pdf,
+                self.extract_text_from_excel,
                 self.chunk_document,
                 self.prepare_document_metadata,
                 self.filter_duplicate_vectors
