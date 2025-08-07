@@ -71,8 +71,8 @@ def firecrawl_scrape_native(url, prompt, schema, test_mode=True):
         # Get optimized configuration for this URL
         scrape_config = _get_scrape_config_for_url(url, test_mode)
         
-        print(f"🔍 Scraping {url} with config: {scrape_config['source_type']}")
-        print(f"⏱️ Wait time: {scrape_config['wait_for']}ms, Timeout: {scrape_config['timeout']}ms")
+        print(f"SCRAPING {url} with config: {scrape_config['source_type']}")
+        print(f"TIMING Wait time: {scrape_config['wait_for']}ms, Timeout: {scrape_config['timeout']}ms")
         
         def scrape_operation():
             return app.scrape_url(
@@ -98,28 +98,28 @@ def firecrawl_scrape_native(url, prompt, schema, test_mode=True):
                 data = result['data']
                 if isinstance(data, dict):
                     if 'markdown' in data and data['markdown']:
-                        print(f"✅ Successfully scraped {len(data['markdown'])} characters")
+                        print(f"SUCCESS Successfully scraped {len(data['markdown'])} characters")
                         return data['markdown']
                     elif 'content' in data and data['content']:
-                        print(f"✅ Successfully scraped {len(data['content'])} characters")
+                        print(f"SUCCESS Successfully scraped {len(data['content'])} characters")
                         return data['content']
                     else:
                         return str(data)
                 else:
                     # data is an object
                     if hasattr(data, 'markdown') and data.markdown:
-                        print(f"✅ Successfully scraped {len(data.markdown)} characters")
+                        print(f"SUCCESS Successfully scraped {len(data.markdown)} characters")
                         return data.markdown
                     elif hasattr(data, 'content') and data.content:
-                        print(f"✅ Successfully scraped {len(data.content)} characters")
+                        print(f"SUCCESS Successfully scraped {len(data.content)} characters")
                         return data.content
                     else:
                         return str(data)
             elif 'markdown' in result:
-                print(f"✅ Successfully scraped {len(result['markdown'])} characters")
+                print(f"SUCCESS Successfully scraped {len(result['markdown'])} characters")
                 return result['markdown']
             elif 'content' in result:
-                print(f"✅ Successfully scraped {len(result['content'])} characters")
+                print(f"SUCCESS Successfully scraped {len(result['content'])} characters")
                 return result['content']
             else:
                 return str(result) if result else f"No content extracted from {url}"
@@ -127,24 +127,24 @@ def firecrawl_scrape_native(url, prompt, schema, test_mode=True):
             # Object response
             if hasattr(result, 'data') and result.data:
                 if hasattr(result.data, 'markdown') and result.data.markdown:
-                    print(f"✅ Successfully scraped {len(result.data.markdown)} characters")
+                    print(f"SUCCESS Successfully scraped {len(result.data.markdown)} characters")
                     return result.data.markdown
                 elif hasattr(result.data, 'content') and result.data.content:
-                    print(f"✅ Successfully scraped {len(result.data.content)} characters")
+                    print(f"SUCCESS Successfully scraped {len(result.data.content)} characters")
                     return result.data.content
                 else:
                     return str(result.data)
             elif hasattr(result, 'markdown'):
-                print(f"✅ Successfully scraped {len(result.markdown)} characters")
+                print(f"SUCCESS Successfully scraped {len(result.markdown)} characters")
                 return result.markdown
             elif hasattr(result, 'content'):
-                print(f"✅ Successfully scraped {len(result.content)} characters")
+                print(f"SUCCESS Successfully scraped {len(result.content)} characters")
                 return result.content
             else:
                 return str(result) if result else f"No content extracted from {url}"
             
     except Exception as e:
-        print(f"❌ Scrape error for {url}: {str(e)}")
+        print(f"ERROR Scrape error for {url}: {str(e)}")
         return f"Error with Firecrawl scraper: {str(e)}"
 
 def _get_scrape_config_for_url(url: str, test_mode: bool = True) -> dict:
@@ -203,9 +203,9 @@ def _get_scrape_config_for_url(url: str, test_mode: bool = True) -> dict:
 def firecrawl_crawl_native(url, prompt, schema, test_mode=True, max_depth=None, limit=None):
     """Custom Firecrawl crawler using direct API with PROPER ASYNC HANDLING and dynamic configuration"""
     try:
-        print(f"🔧 Getting Firecrawl app instance...")
+        print(f"SETUP Getting Firecrawl app instance...")
         app = get_firecrawl_app()
-        print(f"✅ Firecrawl app initialized successfully")
+        print(f"SUCCESS Firecrawl app initialized successfully")
         
         # Import ScrapeOptions if needed
         from firecrawl import ScrapeOptions
@@ -220,8 +220,8 @@ def firecrawl_crawl_native(url, prompt, schema, test_mode=True, max_depth=None, 
         poll_interval = 2  # seconds between status checks
         max_wait_time = crawl_config["timeout"]
         
-        print(f"🕷️ Starting crawl of {url} (limit: {actual_limit}, max_depth: {actual_max_depth})")
-        print(f"📋 Source type: {crawl_config['source_type']}, Wait time: {crawl_config['wait_for']}ms")
+        print(f"CRAWLING Starting crawl of {url} (limit: {actual_limit}, max_depth: {actual_max_depth})")
+        print(f"INFO Source type: {crawl_config['source_type']}, Wait time: {crawl_config['wait_for']}ms")
         
         # Create ScrapeOptions for the pages being crawled
         scrape_options = ScrapeOptions(
@@ -231,7 +231,7 @@ def firecrawl_crawl_native(url, prompt, schema, test_mode=True, max_depth=None, 
             timeout=crawl_config["page_timeout"]
         )
         
-        print(f"🔧 Preparing crawl with retry logic...")
+        print(f"SETUP Preparing crawl with retry logic...")
         
         # Use retry logic for the crawl operation
         # Create a dummy crew instance just for the retry method
@@ -256,37 +256,37 @@ def firecrawl_crawl_native(url, prompt, schema, test_mode=True, max_depth=None, 
             retry_delay=5
         )
         
-        print(f"✅ Crawl API call successful, got response type: {type(crawl_response)}")
-        print(f"🔄 Processing crawl response...")
+        print(f"SUCCESS Crawl API call successful, got response type: {type(crawl_response)}")
+        print(f"PROCESSING Processing crawl response...")
         
         # The crawl_url method should return the complete crawl results
         # Check if we have data in the response
         if isinstance(crawl_response, dict):
-            print(f"📦 Got dict response with keys: {list(crawl_response.keys())}")
+            print(f"DATA Got dict response with keys: {list(crawl_response.keys())}")
             if 'data' in crawl_response and crawl_response['data']:
-                print(f"✅ Crawl completed with {len(crawl_response['data'])} pages")
+                print(f"SUCCESS Crawl completed with {len(crawl_response['data'])} pages")
                 return format_crawl_results(crawl_response['data'])
             elif 'success' in crawl_response and not crawl_response['success']:
                 error_msg = crawl_response.get('error', 'Unknown error')
-                print(f"❌ Crawl failed: {error_msg}")
+                print(f"ERROR Crawl failed: {error_msg}")
                 return f"Crawl failed for {url}: {error_msg}"
             else:
                 # If no data key, it might be the whole response is the data
                 return str(crawl_response)
         else:
             # Handle object response
-            print(f"📦 Got object response: {type(crawl_response)}")
+            print(f"DATA Got object response: {type(crawl_response)}")
             if hasattr(crawl_response, 'data') and crawl_response.data:
-                print(f"✅ Crawl completed with {len(crawl_response.data)} pages")
+                print(f"SUCCESS Crawl completed with {len(crawl_response.data)} pages")
                 return format_crawl_results(crawl_response.data)
             else:
                 return str(crawl_response) if crawl_response else f"No response from crawl of {url}"
         
     except Exception as e:
-        print(f"❌ Crawl error: {str(e)}")
-        print(f"🔍 Error type: {type(e)}")
+        print(f"ERROR Crawl error: {str(e)}")
+        print(f"SCRAPING Error type: {type(e)}")
         import traceback
-        print(f"🔍 Traceback: {traceback.format_exc()}")
+        print(f"SCRAPING Traceback: {traceback.format_exc()}")
         return f"Error with Firecrawl crawler: {str(e)}"
 
 def _get_crawl_config_for_url(url: str, test_mode: bool = True) -> dict:
@@ -1400,7 +1400,7 @@ class InverbotPipelineDato():
             return f"Error crawling INE Social: {str(e)}"
     
     @tool("Extract Structured Data from Raw Content")
-    def extract_structured_data_from_raw(self, raw_content: dict) -> dict:
+    def extract_structured_data_from_raw(raw_content: dict) -> dict:
         """Convert raw scraped content into structured database format.
         
         This tool takes the raw content extracted by scrapers and converts it into
@@ -1421,6 +1421,9 @@ class InverbotPipelineDato():
         import json
         
         try:
+            # Create a crew instance to access helper methods
+            crew_instance = InverbotPipelineDato()
+            
             # Extract content from raw_content
             page_content = raw_content.get("page_content", "")
             links = raw_content.get("links", [])
@@ -1455,22 +1458,22 @@ class InverbotPipelineDato():
             
             # Analyze content type based on URL and content patterns
             source_url = metadata.get("url", "")
-            content_type = self._identify_content_type(source_url, page_content)
+            content_type = crew_instance._identify_content_type(source_url, page_content)
             
             # Route processing based on content type
             if "bva" in source_url.lower():
-                structured_data, metrics = self._process_bva_content(page_content, links, documents, structured_data)
+                structured_data, metrics = crew_instance._process_bva_content(page_content, links, documents, structured_data)
             elif "ine.gov.py" in source_url.lower():
-                structured_data, metrics = self._process_ine_content(page_content, links, documents, structured_data)
+                structured_data, metrics = crew_instance._process_ine_content(page_content, links, documents, structured_data)
             elif "datos.gov.py" in source_url.lower():
-                structured_data, metrics = self._process_datos_gov_content(page_content, links, documents, structured_data)
+                structured_data, metrics = crew_instance._process_datos_gov_content(page_content, links, documents, structured_data)
             elif "contrataciones.gov.py" in source_url.lower():
-                structured_data, metrics = self._process_contracts_content(page_content, links, documents, structured_data)
+                structured_data, metrics = crew_instance._process_contracts_content(page_content, links, documents, structured_data)
             elif "dnit.gov.py" in source_url.lower():
-                structured_data, metrics = self._process_dnit_content(page_content, links, documents, structured_data)
+                structured_data, metrics = crew_instance._process_dnit_content(page_content, links, documents, structured_data)
             else:
                 # Generic processing for unknown sources
-                structured_data, metrics = self._process_generic_content(page_content, links, documents, structured_data)
+                structured_data, metrics = crew_instance._process_generic_content(page_content, links, documents, structured_data)
             
             # Update processing report
             processing_report["records_extracted"] = sum(len(records) for records in structured_data.values())
@@ -1773,7 +1776,7 @@ class InverbotPipelineDato():
         return currency_names.get(code, f"Moneda {code}")
     
     @tool("Normalize Data Tool")
-    def normalize_data(self, raw_data: dict) -> dict:
+    def normalize_data(raw_data: dict) -> dict:
         """Normalize and clean raw extracted data from scrapers.
         
         Args:
@@ -2886,7 +2889,7 @@ class InverbotPipelineDato():
             return {"error": f"Error in PDF text extraction: {str(e)}", "pdf_url": pdf_url}
 
     @tool("Extract Text from Excel Tool")
-    def extract_text_from_excel(self, excel_url: str) -> dict:
+    def extract_text_from_excel(excel_url: str) -> dict:
         """Extract text content from Excel files (.xlsx, .xls).
         
         Args:
@@ -3681,7 +3684,7 @@ class InverbotPipelineDato():
         return primary_keys.get(table_name)
 
     @tool("Database Connectivity Validator")
-    def validate_production_config(self, test_mode: bool = None) -> str:
+    def validate_production_config(test_mode: bool = None) -> str:
         """Validate all production configurations and database connectivity.
         
         Args:
@@ -3690,8 +3693,11 @@ class InverbotPipelineDato():
         Returns:
             Validation report as JSON string
         """
+        # Create a crew instance to access helper methods
+        crew_instance = InverbotPipelineDato()
+        
         if test_mode is None:
-            test_mode = self.test_mode
+            test_mode = crew_instance.test_mode
             
         validation_report = {
             "timestamp": datetime.datetime.now().isoformat(),
@@ -3717,7 +3723,7 @@ class InverbotPipelineDato():
             
             for var, value in env_vars.items():
                 validation_report["environment_variables"][var] = {
-                    "status": "✅ Present" if value else "❌ Missing",
+                    "status": "SUCCESS Present" if value else "ERROR Missing",
                     "length": len(value) if value else 0
                 }
                 if not value:
@@ -3732,7 +3738,7 @@ class InverbotPipelineDato():
                         # Safe read-only test
                         result = supabase.table("Categoria_Emisor").select("*").limit(1).execute()
                         validation_report["database_connectivity"]["supabase"] = {
-                            "status": "✅ Connected",
+                            "status": "SUCCESS Connected",
                             "test": "Read test successful",
                             "tables_accessible": True
                         }
@@ -3748,7 +3754,7 @@ class InverbotPipelineDato():
                         delete_result = supabase.table("Categoria_Emisor").delete().eq("id_categoria_emisor", 99999).execute()
                         
                         validation_report["database_connectivity"]["supabase"] = {
-                            "status": "✅ Connected",
+                            "status": "SUCCESS Connected",
                             "test": "Write/Delete test successful",
                             "can_write": True,
                             "can_delete": True
@@ -3756,7 +3762,7 @@ class InverbotPipelineDato():
                         
                 except Exception as e:
                     validation_report["database_connectivity"]["supabase"] = {
-                        "status": "❌ Failed",
+                        "status": "ERROR Failed",
                         "error": str(e)
                     }
                     validation_report["errors"].append(f"Supabase connection failed: {str(e)}")
@@ -3779,14 +3785,14 @@ class InverbotPipelineDato():
                             test_index = pinecone.Index(indexes[0])
                             stats = test_index.describe_index_stats()
                             validation_report["database_connectivity"]["pinecone"] = {
-                                "status": "✅ Connected",
+                                "status": "SUCCESS Connected",
                                 "available_indexes": indexes,
                                 "missing_indexes": missing_indexes,
                                 "test_stats": stats
                             }
                         else:
                             validation_report["database_connectivity"]["pinecone"] = {
-                                "status": "⚠️ No indexes found",
+                                "status": "WARNING No indexes found",
                                 "available_indexes": indexes,
                                 "missing_indexes": missing_indexes
                             }
@@ -3804,7 +3810,7 @@ class InverbotPipelineDato():
                             test_index.delete(ids=["validation_test_vector"])
                             
                             validation_report["database_connectivity"]["pinecone"] = {
-                                "status": "✅ Connected",
+                                "status": "SUCCESS Connected",
                                 "available_indexes": indexes,
                                 "missing_indexes": missing_indexes,
                                 "can_write": True,
@@ -3812,7 +3818,7 @@ class InverbotPipelineDato():
                             }
                         else:
                             validation_report["database_connectivity"]["pinecone"] = {
-                                "status": "❌ Missing required indexes",
+                                "status": "ERROR Missing required indexes",
                                 "available_indexes": indexes,
                                 "missing_indexes": missing_indexes
                             }
@@ -3820,7 +3826,7 @@ class InverbotPipelineDato():
                     
                 except Exception as e:
                     validation_report["database_connectivity"]["pinecone"] = {
-                        "status": "❌ Failed",
+                        "status": "ERROR Failed",
                         "error": str(e)
                     }
                     validation_report["errors"].append(f"Pinecone connection failed: {str(e)}")
@@ -3832,17 +3838,17 @@ class InverbotPipelineDato():
                     genai.configure(api_key=env_vars["GEMINI_API_KEY"])
                     
                     # Test embedding creation with retry logic
-                    embedding = self._create_embedding_with_retry("Test validation text", max_retries=2, retry_delay=3)
+                    embedding = crew_instance._create_embedding_with_retry("Test validation text", max_retries=2, retry_delay=3)
                     
                     validation_report["api_limits"]["gemini"] = {
-                        "status": "✅ Connected",
+                        "status": "SUCCESS Connected",
                         "embedding_dimensions": len(embedding),
                         "model": "models/embedding-001"
                     }
                     
                 except Exception as e:
                     validation_report["api_limits"]["gemini"] = {
-                        "status": "❌ Failed",
+                        "status": "ERROR Failed",
                         "error": str(e)
                     }
                     validation_report["errors"].append(f"Gemini API failed: {str(e)}")
@@ -3860,34 +3866,34 @@ class InverbotPipelineDato():
                     )
                     
                     validation_report["api_limits"]["firecrawl"] = {
-                        "status": "✅ Connected",
+                        "status": "SUCCESS Connected",
                         "test_result": "Successfully scraped test URL"
                     }
                     
                 except Exception as e:
                     validation_report["api_limits"]["firecrawl"] = {
-                        "status": "❌ Failed", 
+                        "status": "ERROR Failed", 
                         "error": str(e)
                     }
                     validation_report["errors"].append(f"Firecrawl API failed: {str(e)}")
             
             # 6. Generate Recommendations
             if not validation_report["errors"]:
-                validation_report["overall_status"] = "✅ Ready for Production"
+                validation_report["overall_status"] = "SUCCESS Ready for Production"
                 validation_report["recommendations"] = [
                     "All systems operational - ready for production deployment",
                     "Consider monitoring API usage during first production run",
                     "Backup current data before large-scale operations"
                 ]
             elif len(validation_report["errors"]) <= 2:
-                validation_report["overall_status"] = "⚠️ Minor Issues"
+                validation_report["overall_status"] = "WARNING Minor Issues"
                 validation_report["recommendations"] = [
                     "Address the identified issues before production",
                     "Most systems are operational",
                     "Consider test mode for problematic components"
                 ]
             else:
-                validation_report["overall_status"] = "❌ Not Ready"
+                validation_report["overall_status"] = "ERROR Not Ready"
                 validation_report["recommendations"] = [
                     "Multiple critical issues identified",
                     "Do not proceed with production until resolved",
@@ -3897,7 +3903,7 @@ class InverbotPipelineDato():
             return json.dumps(validation_report, indent=2)
             
         except Exception as e:
-            validation_report["overall_status"] = "❌ Validation Failed"
+            validation_report["overall_status"] = "ERROR Validation Failed"
             validation_report["errors"].append(f"Validation process error: {str(e)}")
             return json.dumps(validation_report, indent=2)
 

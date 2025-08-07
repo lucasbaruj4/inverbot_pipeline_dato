@@ -1,0 +1,51 @@
+```json
+{
+  "loading_results": {
+    "supabase_results": {
+      "tables_loaded": [],
+      "total_records_inserted": 0,
+      "loading_errors": [
+        "Data extraction failed, no structured data available for loading into Supabase."
+      ],
+      "batch_statistics": {},
+      "foreign_key_validations": {}
+    },
+    "pinecone_results": {
+      "indices_loaded": [],
+      "total_vectors_inserted": 0,
+      "embedding_errors": [
+        "Data extraction failed, no vector data available for embedding generation and loading into Pinecone."
+      ],
+      "batch_statistics": {},
+      "embedding_generation_time": 0.0
+    }
+  },
+  "data_integrity_report": {
+    "supabase_validation": {
+      "record_counts": {},
+      "constraint_violations": [
+        "No data available for Supabase validation due to extraction failure."
+      ],
+      "orphaned_records": []
+    },
+    "pinecone_validation": {
+      "vector_counts": {},
+      "embedding_dimension_check": "not_applicable_due_to_extraction_failure",
+      "metadata_completeness": {}
+    },
+    "cross_database_links": {
+      "structured_to_vector_mapping": 0,
+      "unmapped_records": []
+    }
+  },
+  "pipeline_summary": {
+    "total_execution_time": 0.0,
+    "extraction_records": 0,
+    "processing_success_rate": 0.0,
+    "vectorization_success_rate": 0.0,
+    "loading_success_rate": 0.0,
+    "overall_pipeline_status": "FAILED",
+    "failure_reason": "Initial data extraction failed due to an internal tool error: '_extract_title_from_link' is not defined. Cannot proceed with further pipeline stages as per provided context."
+  }
+}
+```
