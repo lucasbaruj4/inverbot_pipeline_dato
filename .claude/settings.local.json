@@ -3,7 +3,8 @@
     "allow": [
       "Bash(grep:*)",
       "Bash(sed:*)",
-      "mcp__serena"
+      "mcp__serena",
+      "mcp__context7"
     ],
     "deny": []
   }

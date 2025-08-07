@@ -16,7 +16,7 @@ from crewai import Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, crew, task
 from crewai.agents.agent_builder.base_agent import BaseAgent
 from crewai.tools import tool
-from crewai_tools import FirecrawlScrapeWebsiteTool, FirecrawlCrawlWebsiteTool
+# from crewai_tools import FirecrawlScrapeWebsiteTool, FirecrawlCrawlWebsiteTool  # DISABLED - Version incompatibility
 
 # External Dependencies
 import requests
@@ -35,7 +35,7 @@ elif os.path.exists(".env"):
 from inverbot_pipeline_dato.data import data_source
 
 # DISABLED: Native CrewAI Firecrawl tools due to version incompatibility
-# from crewai_tools import FirecrawlScrapeWebsiteTool, FirecrawlCrawlWebsiteTool
+# # from crewai_tools import FirecrawlScrapeWebsiteTool, FirecrawlCrawlWebsiteTool  # DISABLED - Version incompatibility
 # CrewAI tools v0.59.0 uses old 'params=' API while firecrawl-py v2.16.3 uses direct parameters
 
 # ================================================================================================
@@ -56,9 +56,9 @@ def get_firecrawl_app():
         firecrawl_app = FirecrawlApp(api_key=api_key)
     return firecrawl_app
 
-# CrewAI Native Tool Instances (reusable across scrapers)
-scrape_tool = FirecrawlScrapeWebsiteTool()
-crawl_tool = FirecrawlCrawlWebsiteTool()
+# CrewAI Native Tool Instances (DISABLED - Version incompatibility)
+# scrape_tool = FirecrawlScrapeWebsiteTool()
+# crawl_tool = FirecrawlCrawlWebsiteTool()
 
 # serper_dev_tool = SerperDevTool()
 
@@ -129,7 +129,12 @@ def firecrawl_scrape_native(url, prompt, schema, test_mode=True):
 def firecrawl_crawl_native(url, prompt, schema, test_mode=True):
     """Custom Firecrawl crawler using direct API with PROPER ASYNC HANDLING"""
     try:
+        print(f"🔧 Getting Firecrawl app instance...")
         app = get_firecrawl_app()
+        print(f"✅ Firecrawl app initialized successfully")
+        
+        # Import ScrapeOptions if needed
+        from firecrawl import ScrapeOptions
         
         # Configure based on test mode
         max_depth = 2
@@ -139,116 +144,55 @@ def firecrawl_crawl_native(url, prompt, schema, test_mode=True):
         
         print(f"🕷️ Starting crawl of {url} (limit: {limit}, max_depth: {max_depth})")
         
-        # Start the crawl job - this returns immediately with a job ID
+        # Create ScrapeOptions for the pages being crawled
+        scrape_options = ScrapeOptions(
+            formats=["markdown"],
+            only_main_content=True,
+            wait_for=3000,
+            timeout=30000
+        )
+        
+        print(f"🔧 Calling app.crawl_url() with correct parameters...")
+        # Use the correct parameter structure from documentation
         crawl_response = app.crawl_url(
             url=url,
-            max_depth=max_depth,
             limit=limit,
-            allow_backward_links=False,
-            allow_external_links=False,
-            scrape_options={
-                "formats": ["markdown"],
-                "only_main_content": True,
-                "wait_for": 3000,
-                "timeout": 30000
-            },
+            max_depth=max_depth,
+            scrape_options=scrape_options,
             poll_interval=poll_interval
         )
         
-        print(f"🔄 Crawl job started. Waiting for completion...")
+        print(f"✅ Crawl API call successful, got response type: {type(crawl_response)}")
+        print(f"🔄 Processing crawl response...")
         
-        # If we get immediate data, return it
+        # The crawl_url method should return the complete crawl results
+        # Check if we have data in the response
         if isinstance(crawl_response, dict):
-            # Handle dictionary response
+            print(f"📦 Got dict response with keys: {list(crawl_response.keys())}")
             if 'data' in crawl_response and crawl_response['data']:
-                print(f"✅ Crawl completed immediately with {len(crawl_response['data'])} pages")
+                print(f"✅ Crawl completed with {len(crawl_response['data'])} pages")
                 return format_crawl_results(crawl_response['data'])
-            elif 'id' in crawl_response:
-                job_id = crawl_response['id']
+            elif 'success' in crawl_response and not crawl_response['success']:
+                error_msg = crawl_response.get('error', 'Unknown error')
+                print(f"❌ Crawl failed: {error_msg}")
+                return f"Crawl failed for {url}: {error_msg}"
             else:
-                return f"Unexpected response format from Firecrawl: {crawl_response}"
+                # If no data key, it might be the whole response is the data
+                return str(crawl_response)
         else:
             # Handle object response
+            print(f"📦 Got object response: {type(crawl_response)}")
             if hasattr(crawl_response, 'data') and crawl_response.data:
-                print(f"✅ Crawl completed immediately with {len(crawl_response.data)} pages")
+                print(f"✅ Crawl completed with {len(crawl_response.data)} pages")
                 return format_crawl_results(crawl_response.data)
-            elif hasattr(crawl_response, 'id'):
-                job_id = crawl_response.id
             else:
-                return f"Unexpected response format from Firecrawl: {crawl_response}"
-        
-        print(f"📋 Got job ID: {job_id}. Polling for results...")
-        
-        start_time = time.time()
-        while time.time() - start_time < max_wait_time:
-            try:
-                # Check job status
-                status = app.check_crawl_status(job_id)
-                
-                # Handle both dict and object responses for status
-                if isinstance(status, dict):
-                    # Dictionary response
-                    if 'status' in status:
-                        current_status = status['status']
-                        print(f"🔍 Crawl status: {current_status}")
-                        
-                        if current_status == 'completed':
-                            if 'data' in status and status['data']:
-                                print(f"✅ Crawl completed with {len(status['data'])} pages")
-                                return format_crawl_results(status['data'])
-                            else:
-                                print("⚠️ Crawl completed but no data returned")
-                                return f"Crawl completed but no data was extracted from {url}"
-                        
-                        elif current_status == 'failed':
-                            error_msg = status.get('error', 'Unknown error')
-                            print(f"❌ Crawl failed: {error_msg}")
-                            return f"Crawl failed for {url}: {error_msg}"
-                        
-                        elif current_status in ['pending', 'running']:
-                            print(f"⏳ Crawl in progress... waiting {poll_interval}s")
-                            time.sleep(poll_interval)
-                            continue
-                else:
-                    # Object response
-                    if hasattr(status, 'status'):
-                        print(f"🔍 Crawl status: {status.status}")
-                        
-                        if status.status == 'completed':
-                            if hasattr(status, 'data') and status.data:
-                                print(f"✅ Crawl completed with {len(status.data)} pages")
-                                return format_crawl_results(status.data)
-                            else:
-                                print("⚠️ Crawl completed but no data returned")
-                                return f"Crawl completed but no data was extracted from {url}"
-                        
-                        elif status.status == 'failed':
-                            error_msg = getattr(status, 'error', 'Unknown error')
-                            print(f"❌ Crawl failed: {error_msg}")
-                            return f"Crawl failed for {url}: {error_msg}"
-                        
-                        elif status.status in ['pending', 'running']:
-                            print(f"⏳ Crawl in progress... waiting {poll_interval}s")
-                            time.sleep(poll_interval)
-                            continue
-                    
-                    # If status doesn't have expected format, wait and retry
-                    time.sleep(poll_interval)
-                    
-            except Exception as status_error:
-                print(f"⚠️ Error checking status: {status_error}")
-                time.sleep(poll_interval)
-                continue
-            
-            # Timeout reached
-            print(f"⏰ Crawl timeout reached ({max_wait_time}s)")
-            return f"Crawl timeout for {url} after {max_wait_time} seconds"
-        
-        # Fallback: return whatever we got
-        return str(crawl_response) if crawl_response else f"No response from crawl of {url}"
+                return str(crawl_response) if crawl_response else f"No response from crawl of {url}"
         
     except Exception as e:
         print(f"❌ Crawl error: {str(e)}")
+        print(f"🔍 Error type: {type(e)}")
+        import traceback
+        print(f"🔍 Traceback: {traceback.format_exc()}")
         return f"Error with Firecrawl crawler: {str(e)}"
 
 

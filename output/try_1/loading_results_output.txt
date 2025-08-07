@@ -1,0 +1,50 @@
+```json
+{
+  "loading_results": {
+    "supabase_results": {
+      "tables_loaded": [],
+      "total_records_inserted": 0,
+      "loading_errors": [
+        "Pipeline initiation failed: Structured data not available due to upstream extraction error."
+      ],
+      "batch_statistics": {},
+      "foreign_key_validations": {}
+    },
+    "pinecone_results": {
+      "indices_loaded": [],
+      "total_vectors_inserted": 0,
+      "embedding_errors": [
+        "Pipeline initiation failed: Vector data not available due to upstream extraction error."
+      ],
+      "batch_statistics": {},
+      "embedding_generation_time": 0.0
+    }
+  },
+  "data_integrity_report": {
+    "supabase_validation": {
+      "record_counts": {},
+      "constraint_violations": [
+        "Validation skipped: Structured data was not generated."
+      ],
+      "orphaned_records": []
+    },
+    "pinecone_validation": {
+      "vector_counts": {},
+      "embedding_dimension_check": "Validation skipped: Vector data was not generated.",
+      "metadata_completeness": {}
+    },
+    "cross_database_links": {
+      "structured_to_vector_mapping": 0,
+      "unmapped_records": []
+    }
+  },
+  "pipeline_summary": {
+    "total_execution_time": 0.0,
+    "extraction_records": 0,
+    "processing_success_rate": 0.0,
+    "vectorization_success_rate": 0.0,
+    "loading_success_rate": 0.0,
+    "overall_pipeline_status": "FAILED"
+  }
+}
+```

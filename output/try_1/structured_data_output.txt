@@ -1,0 +1,1 @@
+I am unable to produce the structured data as the `Extract Structured Data from Raw Content` tool is encountering an internal error ("name '_identify_content_type' is not defined") and cannot process the raw content. This prevents the initiation of the 6-stage pipeline and subsequent data transformation.
