@@ -83,12 +83,12 @@ def firecrawl_scrape_native(url, prompt, schema, test_mode=True):
                 timeout=scrape_config["timeout"]
             )
         
-        # Execute with retry logic
+        # Execute with retry logic - faster for testing  
         result = _execute_firecrawl_with_retry(
             operation_func=scrape_operation,
             operation_name=f"scrape {url}",
-            max_retries=3,
-            retry_delay=5
+            max_retries=2,  # Reduced from 3
+            retry_delay=3   # Reduced from 5
         )
         
         # Extract content from response - handle both dict and object
@@ -157,32 +157,32 @@ def _get_scrape_config_for_url(url: str, test_mode: bool = True) -> dict:
     Returns:
         Dictionary with scrape configuration parameters
     """
-    # Source-specific configurations for single-page scraping
+    # Source-specific configurations for single-page scraping - optimized for testing
     source_configs = {
         "bva_daily": {
             "source_type": "BVA Daily Reports",
-            "wait_for": 3000 if test_mode else 5000,
-            "timeout": 30000 if test_mode else 45000
+            "wait_for": 1500 if test_mode else 5000,  # Reduced from 3000
+            "timeout": 15000 if test_mode else 45000  # Reduced from 30000
         },
         "bva_monthly": {
             "source_type": "BVA Monthly Reports", 
-            "wait_for": 4000 if test_mode else 6000,  # Forms take time to load
-            "timeout": 35000 if test_mode else 50000
+            "wait_for": 2000 if test_mode else 6000,  # Reduced from 4000
+            "timeout": 18000 if test_mode else 50000  # Reduced from 35000
         },
         "bva_annual": {
             "source_type": "BVA Annual Reports",
-            "wait_for": 3000 if test_mode else 5000,
-            "timeout": 30000 if test_mode else 45000
+            "wait_for": 1500 if test_mode else 5000,  # Reduced from 3000
+            "timeout": 15000 if test_mode else 45000  # Reduced from 30000
         },
         "dnit_investment": {
             "source_type": "DNIT Investment",
-            "wait_for": 4000 if test_mode else 6000,  # Infographics load slowly
-            "timeout": 35000 if test_mode else 50000
+            "wait_for": 2000 if test_mode else 6000,  # Reduced from 4000
+            "timeout": 18000 if test_mode else 50000  # Reduced from 35000
         },
         "general": {
             "source_type": "General Source",
-            "wait_for": 3000 if test_mode else 5000,
-            "timeout": 30000 if test_mode else 45000
+            "wait_for": 1500 if test_mode else 5000,  # Reduced from 3000
+            "timeout": 15000 if test_mode else 45000  # Reduced from 30000
         }
     }
     
@@ -248,12 +248,12 @@ def firecrawl_crawl_native(url, prompt, schema, test_mode=True, max_depth=None, 
                 poll_interval=poll_interval
             )
         
-        # Execute with retry logic
+        # Execute with retry logic - faster for testing
         crawl_response = _execute_firecrawl_with_retry(
             operation_func=crawl_operation,
             operation_name=f"crawl {url}",
-            max_retries=3,
-            retry_delay=5
+            max_retries=2,  # Reduced from 3
+            retry_delay=3   # Reduced from 5
         )
         
         print(f"SUCCESS Crawl API call successful, got response type: {type(crawl_response)}")
@@ -377,7 +377,7 @@ def _get_crawl_config_for_url(url: str, test_mode: bool = True) -> dict:
             "timeout": 120 if test_mode else 300
         }
 
-def _execute_firecrawl_with_retry(operation_func, operation_name: str, max_retries: int = 3, retry_delay: int = 5, **kwargs):
+def _execute_firecrawl_with_retry(operation_func, operation_name: str, max_retries: int = 2, retry_delay: int = 3, **kwargs):
     """Execute Firecrawl operations with exponential backoff retry logic for network resilience.
     
     Args:
@@ -1461,7 +1461,7 @@ class InverbotPipelineDato():
             content_type = crew_instance._identify_content_type(source_url, page_content)
             
             # Route processing based on content type
-            if "bva" in source_url.lower():
+            if "bva" in source_url.lower() or "bolsadevalores" in source_url.lower():
                 structured_data, metrics = crew_instance._process_bva_content(page_content, links, documents, structured_data)
             elif "ine.gov.py" in source_url.lower():
                 structured_data, metrics = crew_instance._process_ine_content(page_content, links, documents, structured_data)
@@ -1553,6 +1553,8 @@ class InverbotPipelineDato():
 
     def _process_bva_content(self, content: str, links: list, documents: list, structured_data: dict) -> tuple:
         """Process BVA (stock exchange) content into structured format."""
+        import re
+        
         metrics = {"processing_method": "BVA_content_analysis"}
         
         # Extract emisores (issuers) information
@@ -1584,11 +1586,11 @@ class InverbotPipelineDato():
                     frecuencia = "Variable"
                 
                 structured_data["Informe_General"].append({
-                    "titulo_informe": _extract_title_from_link(link),
+                    "titulo_informe": self._extract_title_from_link(link),
                     "id_tipo_informe": 1,  # Will be resolved by entity relationships tool
-                    "fecha_publicacion": _extract_date_from_content(content, link),
+                    "fecha_publicacion": self._extract_date_from_content(content, link),
                     "url_descarga_original": link,
-                    "resumen_informe": _extract_summary_from_content(content, link)
+                    "resumen_informe": self._extract_summary_from_content(content, link)
                 })
                 
                 # Add corresponding type and frequency
@@ -1612,7 +1614,7 @@ class InverbotPipelineDato():
                     if currency not in [m["codigo_moneda"] for m in structured_data["Moneda"]]:
                         structured_data["Moneda"].append({
                             "codigo_moneda": currency,
-                            "nombre_moneda": _get_currency_name(currency)
+                            "nombre_moneda": self._get_currency_name(currency)
                         })
         
         metrics["emisores_extracted"] = len(structured_data["Emisores"])
@@ -1623,17 +1625,19 @@ class InverbotPipelineDato():
 
     def _process_ine_content(self, content: str, links: list, documents: list, structured_data: dict) -> tuple:
         """Process INE (statistics institute) content into structured format."""
+        from datetime import datetime
+        
         metrics = {"processing_method": "INE_content_analysis"}
         
         # Extract statistical reports and publications
         for link in links + documents:
             if any(term in link.lower() for term in ["pdf", "publicacion", "censo", "encuesta", "estadistica"]):
                 structured_data["Informe_General"].append({
-                    "titulo_informe": _extract_title_from_link(link),
+                    "titulo_informe": self._extract_title_from_link(link),
                     "id_tipo_informe": 2,  # Statistical report type
-                    "fecha_publicacion": _extract_date_from_content(content, link),
+                    "fecha_publicacion": self._extract_date_from_content(content, link),
                     "url_descarga_original": link,
-                    "resumen_informe": _extract_summary_from_content(content, link)
+                    "resumen_informe": self._extract_summary_from_content(content, link)
                 })
         
         # Extract macroeconomic indicators
@@ -1673,9 +1677,9 @@ class InverbotPipelineDato():
         for link in links + documents:
             if any(term in link.lower() for term in ["dataset", "csv", "excel", "datos"]):
                 structured_data["Informe_General"].append({
-                    "titulo_informe": _extract_title_from_link(link),
+                    "titulo_informe": self._extract_title_from_link(link),
                     "id_tipo_informe": 3,  # Dataset type
-                    "fecha_publicacion": _extract_date_from_content(content, link),
+                    "fecha_publicacion": self._extract_date_from_content(content, link),
                     "url_descarga_original": link,
                     "resumen_informe": "Dataset del portal de datos abiertos"
                 })
@@ -1684,6 +1688,9 @@ class InverbotPipelineDato():
 
     def _process_contracts_content(self, content: str, links: list, documents: list, structured_data: dict) -> tuple:
         """Process public contracts content into structured format."""
+        import re
+        from datetime import datetime
+        
         metrics = {"processing_method": "contracts_analysis"}
         
         # Extract contract information
@@ -1711,9 +1718,9 @@ class InverbotPipelineDato():
         for link in links + documents:
             if any(term in link.lower() for term in ["informe", "financiero", "inversion", "pdf"]):
                 structured_data["Informe_General"].append({
-                    "titulo_informe": _extract_title_from_link(link),
+                    "titulo_informe": self._extract_title_from_link(link),
                     "id_tipo_informe": 4,  # Financial/investment report
-                    "fecha_publicacion": _extract_date_from_content(content, link),
+                    "fecha_publicacion": self._extract_date_from_content(content, link),
                     "url_descarga_original": link,
                     "resumen_informe": "Informe financiero o de inversión DNIT"
                 })
@@ -1722,12 +1729,14 @@ class InverbotPipelineDato():
 
     def _process_generic_content(self, content: str, links: list, documents: list, structured_data: dict) -> tuple:
         """Generic processing for unknown content types."""
+        from datetime import datetime
+        
         metrics = {"processing_method": "generic_analysis"}
         
         # Basic extraction of any documents found
         for link in links + documents:
             structured_data["Informe_General"].append({
-                "titulo_informe": _extract_title_from_link(link),
+                "titulo_informe": self._extract_title_from_link(link),
                 "id_tipo_informe": 5,  # Generic document
                 "fecha_publicacion": datetime.now().strftime("%Y-%m-%d"),
                 "url_descarga_original": link,
@@ -1736,16 +1745,21 @@ class InverbotPipelineDato():
         
         return structured_data, metrics
 
-    def _extract_title_from_link(link: str) -> str:
+    def _extract_title_from_link(self, link: str) -> str:
         """Extract a reasonable title from a URL or document link."""
+        import re
+        
         # Remove file extension and URL parameters
         title = link.split("/")[-1].split("?")[0]
         title = re.sub(r"\.(pdf|xlsx?|csv|doc|docx)$", "", title, flags=re.IGNORECASE)
         title = title.replace("_", " ").replace("-", " ").title()
         return title if len(title) > 3 else "Documento sin título específico"
 
-    def _extract_date_from_content(content: str, context: str = "") -> str:
+    def _extract_date_from_content(self, content: str, context: str = "") -> str:
         """Extract date information from content or context."""
+        import re
+        from datetime import datetime
+        
         # Look for year patterns
         year_pattern = r"20\d{2}"
         years = re.findall(year_pattern, content + " " + context)
@@ -1753,7 +1767,7 @@ class InverbotPipelineDato():
             return f"{years[0]}-01-01"  # Default to January 1st of found year
         return datetime.now().strftime("%Y-%m-%d")
 
-    def _extract_summary_from_content(content: str, link: str) -> str:
+    def _extract_summary_from_content(self, content: str, link: str) -> str:
         """Extract a summary or description from content related to a link."""
         # Simple heuristic: find text near the link mention
         link_context = ""
@@ -1765,7 +1779,7 @@ class InverbotPipelineDato():
         
         return link_context if len(link_context) > 10 else "Documento extraído del contenido de la página"
 
-    def _get_currency_name(code: str) -> str:
+    def _get_currency_name(self, code: str) -> str:
         """Get full currency name from code."""
         currency_names = {
             "USD": "Dólar Estadounidense",

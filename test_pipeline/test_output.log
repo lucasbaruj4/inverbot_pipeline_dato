@@ -1,0 +1,89 @@
+Loaded environment variables from .env.local
+
+======================================================================
+ISOLATED PIPELINE TEST: SCRAPING -> PDF EXTRACTION -> STRUCTURING
+======================================================================
+
+Step 1: Scraping BVA for content and PDF links...
+--------------------------------------------------
+Scraping BVA URL: https://www.bolsadevalores.com.py/informes-mensuales/
+SCRAPING https://www.bolsadevalores.com.py/informes-mensuales/ with config: bva
+TIMING Wait time: 5000ms, Timeout: 30000ms
+SUCCESS Successfully scraped 770 characters
+Found 1 PDF links
+Found 3 total links
+Scraped 770 characters of content
+Found 1 PDF links
+
+Step 2: Extracting text from PDFs...
+--------------------------------------------------
+Processing first 1 PDFs...
+
+PDF 1: https://www.bolsadevalores.com.py/wp-content/uploads/2025/08/Infome-Mensual-Oficial.pdf
+  SUCCESS: Extracted 16181 characters
+  Pages: 13, With text: 13
+
+Step 3: Combining all content...
+--------------------------------------------------
+Total content length: 16974 characters
+Total links: 3
+Total documents: 1
+
+Step 4: Processing into structured data...
+--------------------------------------------------
+
+======================================================================
+STRUCTURED DATA EXTRACTION RESULTS
+======================================================================
+
+Processing Status: success
+Records Extracted: 20
+Tables Populated: 4
+
+Data Quality Metrics:
+  processing_method: BVA_content_analysis
+  emisores_extracted: 17
+  reports_extracted: 1
+  currencies_extracted: 0
+
+Structured Data by Table:
+--------------------------------------------------
+
+Emisores: 17 records
+  Sample record:
+    nombre_emisor: INDEX CBSA
+ACWM CBSA
+    id_categoria_emisor: 1
+    calificacion_bva: No especificada
+
+Frecuencia: 1 records
+  Sample record:
+    nombre_frecuencia: Mensual
+
+Tipo_Informe: 1 records
+  Sample record:
+    nombre_tipo_informe: Informe Mensual
+
+Informe_General: 1 records
+  Sample record:
+    titulo_informe: #Content
+    id_tipo_informe: 1
+    fecha_publicacion: 2025-01-01
+    url_descarga_original: https://www.bolsadevalores.com.py/informes-mensuales/#content
+    resumen_informe: [Ir al contenido](https://www.bolsadevalores.com.py/informes-mensuales/#content)
+
+## MENÚ DE INFORME
+
+======================================================================
+SUMMARY
+======================================================================
+Extraction Summary: Processed BVA Financial Data content from https://www.bolsadevalores.com.py, extracted 20 records across 4 tables
+
+Processing Notes:
+  - Content type identified as: BVA Financial Data
+  - Source URL: https://www.bolsadevalores.com.py
+  - Content length: 16974 characters
+  - Links found: 3
+  - Documents found: 1
+
+Results saved to: test_pipeline_results.json

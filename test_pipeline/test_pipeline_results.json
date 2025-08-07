@@ -1,0 +1,144 @@
+{
+  "structured_data": {
+    "Categoria_Emisor": [],
+    "Emisores": [
+      {
+        "nombre_emisor": "INDEX CBSA\nACWM CBSA",
+        "id_categoria_emisor": 1,
+        "calificacion_bva": "No especificada"
+      },
+      {
+        "nombre_emisor": "BNB INVEST CBSA\nASU CAPITAL CBSA",
+        "id_categoria_emisor": 1,
+        "calificacion_bva": "No especificada"
+      },
+      {
+        "nombre_emisor": "PUENTE CBSA\nITAU INVEST CBSA",
+        "id_categoria_emisor": 1,
+        "calificacion_bva": "No especificada"
+      },
+      {
+        "nombre_emisor": "ITAU INVEST CBSA\nAVALON CBSA\nINVESTOR CBSA",
+        "id_categoria_emisor": 1,
+        "calificacion_bva": "No especificada"
+      },
+      {
+        "nombre_emisor": "BASA CBSA\nCADIEM CBSA\nSUDAMERIS CBSA\nATLAS CBSA",
+        "id_categoria_emisor": 1,
+        "calificacion_bva": "No especificada"
+      },
+      {
+        "nombre_emisor": "SOLAR CBSA\nFAIS CBSA\nINDEX CBSA\nACWM CBSA",
+        "id_categoria_emisor": 1,
+        "calificacion_bva": "No especificada"
+      },
+      {
+        "nombre_emisor": "BASA CBSA\nVALORES CBSA\nINVESTOR CBSA\nCADIEM CBSA",
+        "id_categoria_emisor": 1,
+        "calificacion_bva": "No especificada"
+      },
+      {
+        "nombre_emisor": "UENO CBSA\nVALORES CBSA\nFAMILIAR CBSA",
+        "id_categoria_emisor": 1,
+        "calificacion_bva": "No especificada"
+      },
+      {
+        "nombre_emisor": "SUDAMERIS CBSA\nATLAS CBSA\nINVESTOR CBSA\nPUENTE CBSA",
+        "id_categoria_emisor": 1,
+        "calificacion_bva": "No especificada"
+      },
+      {
+        "nombre_emisor": "ONE ASSET CBSA",
+        "id_categoria_emisor": 1,
+        "calificacion_bva": "No especificada"
+      },
+      {
+        "nombre_emisor": "CADIEM CBSA\nBASA CBSA\nITAU INVEST CBSA\nSUDAMERIS CBSA",
+        "id_categoria_emisor": 1,
+        "calificacion_bva": "No especificada"
+      },
+      {
+        "nombre_emisor": "PUENTE CBSA\nFAMILIAR CBSA\nUENO CBSA\nVALORES CBSA",
+        "id_categoria_emisor": 1,
+        "calificacion_bva": "No especificada"
+      },
+      {
+        "nombre_emisor": "AVALON CBSA\nASU CAPITAL CBSA",
+        "id_categoria_emisor": 1,
+        "calificacion_bva": "No especificada"
+      },
+      {
+        "nombre_emisor": "M\nBASA CBSA\nCADIEM CBSA\nITAU INVEST CBSA",
+        "id_categoria_emisor": 1,
+        "calificacion_bva": "No especificada"
+      },
+      {
+        "nombre_emisor": "BNB INVEST CBSA\nASU CAPITAL CBSA\nSOLAR CBSA\nFAIS CBSA",
+        "id_categoria_emisor": 1,
+        "calificacion_bva": "No especificada"
+      },
+      {
+        "nombre_emisor": "AVALON CBSA\nUENO CBSA\nVALORES CBSA\nFAMILIAR CBSA",
+        "id_categoria_emisor": 1,
+        "calificacion_bva": "No especificada"
+      },
+      {
+        "nombre_emisor": "ATLAS CBSA\nINVESTOR CBSA\nPUENTE CBSA\nAVALON CBSA",
+        "id_categoria_emisor": 1,
+        "calificacion_bva": "No especificada"
+      }
+    ],
+    "Moneda": [],
+    "Frecuencia": [
+      {
+        "nombre_frecuencia": "Mensual"
+      }
+    ],
+    "Tipo_Informe": [
+      {
+        "nombre_tipo_informe": "Informe Mensual"
+      }
+    ],
+    "Periodo_Informe": [],
+    "Unidad_Medida": [],
+    "Instrumento": [],
+    "Informe_General": [
+      {
+        "titulo_informe": "#Content",
+        "id_tipo_informe": 1,
+        "fecha_publicacion": "2025-01-01",
+        "url_descarga_original": "https://www.bolsadevalores.com.py/informes-mensuales/#content",
+        "resumen_informe": "[Ir al contenido](https://www.bolsadevalores.com.py/informes-mensuales/#content)\n\n## MENÚ DE INFORMES\n\n## INFORME MENS"
+      }
+    ],
+    "Resumen_Informe_Financiero": [],
+    "Dato_Macroeconomico": [],
+    "Movimiento_Diario_Bolsa": [],
+    "Licitacion_Contrato": []
+  },
+  "processing_report": {
+    "status": "success",
+    "records_extracted": 20,
+    "tables_populated": 4,
+    "processing_notes": [
+      "Content type identified as: BVA Financial Data",
+      "Source URL: https://www.bolsadevalores.com.py",
+      "Content length: 16974 characters",
+      "Links found: 3",
+      "Documents found: 1"
+    ],
+    "data_quality_metrics": {
+      "processing_method": "BVA_content_analysis",
+      "emisores_extracted": 17,
+      "reports_extracted": 1,
+      "currencies_extracted": 0
+    },
+    "extraction_summary": "Processed BVA Financial Data content from https://www.bolsadevalores.com.py, extracted 20 records across 4 tables"
+  },
+  "raw_content_summary": {
+    "content_length": 16974,
+    "links_count": 3,
+    "documents_count": 1,
+    "source_identified": "BVA Financial Data"
+  }
+}
