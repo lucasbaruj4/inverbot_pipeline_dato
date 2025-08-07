@@ -21,7 +21,7 @@ from crewai.tools import tool
 # External Dependencies
 import requests
 from supabase import create_client, Client
-from pinecone import Pinecone
+import pinecone
 from dotenv import load_dotenv
 from firecrawl import FirecrawlApp
 import uuid
@@ -64,21 +64,31 @@ def get_firecrawl_app():
 
 
 def firecrawl_scrape_native(url, prompt, schema, test_mode=True):
-    """Custom Firecrawl scraper using direct API with proper error handling"""
+    """Custom Firecrawl scraper using direct API with optimized per-source configuration"""
     try:
         app = get_firecrawl_app()
         
-        # Configure based on test mode
-        wait_time = 3000 if test_mode else 5000
-        timeout = 30000 if test_mode else 45000
+        # Get optimized configuration for this URL
+        scrape_config = _get_scrape_config_for_url(url, test_mode)
         
-        # Use direct Firecrawl API - scrape is synchronous
-        result = app.scrape_url(
-            url=url,
-            formats=["markdown"],
-            only_main_content=True,
-            wait_for=wait_time,
-            timeout=timeout
+        print(f"🔍 Scraping {url} with config: {scrape_config['source_type']}")
+        print(f"⏱️ Wait time: {scrape_config['wait_for']}ms, Timeout: {scrape_config['timeout']}ms")
+        
+        def scrape_operation():
+            return app.scrape_url(
+                url=url,
+                formats=["markdown"],
+                only_main_content=True,
+                wait_for=scrape_config["wait_for"],
+                timeout=scrape_config["timeout"]
+            )
+        
+        # Execute with retry logic
+        result = _execute_firecrawl_with_retry(
+            operation_func=scrape_operation,
+            operation_name=f"scrape {url}",
+            max_retries=3,
+            retry_delay=5
         )
         
         # Extract content from response - handle both dict and object
@@ -88,22 +98,28 @@ def firecrawl_scrape_native(url, prompt, schema, test_mode=True):
                 data = result['data']
                 if isinstance(data, dict):
                     if 'markdown' in data and data['markdown']:
+                        print(f"✅ Successfully scraped {len(data['markdown'])} characters")
                         return data['markdown']
                     elif 'content' in data and data['content']:
+                        print(f"✅ Successfully scraped {len(data['content'])} characters")
                         return data['content']
                     else:
                         return str(data)
                 else:
                     # data is an object
                     if hasattr(data, 'markdown') and data.markdown:
+                        print(f"✅ Successfully scraped {len(data.markdown)} characters")
                         return data.markdown
                     elif hasattr(data, 'content') and data.content:
+                        print(f"✅ Successfully scraped {len(data.content)} characters")
                         return data.content
                     else:
                         return str(data)
             elif 'markdown' in result:
+                print(f"✅ Successfully scraped {len(result['markdown'])} characters")
                 return result['markdown']
             elif 'content' in result:
+                print(f"✅ Successfully scraped {len(result['content'])} characters")
                 return result['content']
             else:
                 return str(result) if result else f"No content extracted from {url}"
@@ -111,23 +127,81 @@ def firecrawl_scrape_native(url, prompt, schema, test_mode=True):
             # Object response
             if hasattr(result, 'data') and result.data:
                 if hasattr(result.data, 'markdown') and result.data.markdown:
+                    print(f"✅ Successfully scraped {len(result.data.markdown)} characters")
                     return result.data.markdown
                 elif hasattr(result.data, 'content') and result.data.content:
+                    print(f"✅ Successfully scraped {len(result.data.content)} characters")
                     return result.data.content
                 else:
                     return str(result.data)
             elif hasattr(result, 'markdown'):
+                print(f"✅ Successfully scraped {len(result.markdown)} characters")
                 return result.markdown
             elif hasattr(result, 'content'):
+                print(f"✅ Successfully scraped {len(result.content)} characters")
                 return result.content
             else:
                 return str(result) if result else f"No content extracted from {url}"
             
     except Exception as e:
+        print(f"❌ Scrape error for {url}: {str(e)}")
         return f"Error with Firecrawl scraper: {str(e)}"
 
-def firecrawl_crawl_native(url, prompt, schema, test_mode=True):
-    """Custom Firecrawl crawler using direct API with PROPER ASYNC HANDLING"""
+def _get_scrape_config_for_url(url: str, test_mode: bool = True) -> dict:
+    """Get optimized scrape configuration based on URL and source type.
+    
+    Args:
+        url: The URL being scraped
+        test_mode: Whether we're in test mode
+        
+    Returns:
+        Dictionary with scrape configuration parameters
+    """
+    # Source-specific configurations for single-page scraping
+    source_configs = {
+        "bva_daily": {
+            "source_type": "BVA Daily Reports",
+            "wait_for": 3000 if test_mode else 5000,
+            "timeout": 30000 if test_mode else 45000
+        },
+        "bva_monthly": {
+            "source_type": "BVA Monthly Reports", 
+            "wait_for": 4000 if test_mode else 6000,  # Forms take time to load
+            "timeout": 35000 if test_mode else 50000
+        },
+        "bva_annual": {
+            "source_type": "BVA Annual Reports",
+            "wait_for": 3000 if test_mode else 5000,
+            "timeout": 30000 if test_mode else 45000
+        },
+        "dnit_investment": {
+            "source_type": "DNIT Investment",
+            "wait_for": 4000 if test_mode else 6000,  # Infographics load slowly
+            "timeout": 35000 if test_mode else 50000
+        },
+        "general": {
+            "source_type": "General Source",
+            "wait_for": 3000 if test_mode else 5000,
+            "timeout": 30000 if test_mode else 45000
+        }
+    }
+    
+    # Determine source type from URL
+    url_lower = url.lower()
+    
+    if "bolsadevalores.com.py/informes-diarios" in url_lower:
+        return source_configs["bva_daily"]
+    elif "bolsadevalores.com.py/informes-mensuales" in url_lower:
+        return source_configs["bva_monthly"]
+    elif "bolsadevalores.com.py/informes-anuales" in url_lower:
+        return source_configs["bva_annual"]
+    elif "dnit.gov.py/web/portal-institucional/invertir-en-py" in url_lower:
+        return source_configs["dnit_investment"]
+    else:
+        return source_configs["general"]
+
+def firecrawl_crawl_native(url, prompt, schema, test_mode=True, max_depth=None, limit=None):
+    """Custom Firecrawl crawler using direct API with PROPER ASYNC HANDLING and dynamic configuration"""
     try:
         print(f"🔧 Getting Firecrawl app instance...")
         app = get_firecrawl_app()
@@ -136,30 +210,50 @@ def firecrawl_crawl_native(url, prompt, schema, test_mode=True):
         # Import ScrapeOptions if needed
         from firecrawl import ScrapeOptions
         
-        # Configure based on test mode
-        max_depth = 2
-        limit = 10 if test_mode else 30
-        poll_interval = 2  # seconds between status checks
-        max_wait_time = 120 if test_mode else 300  # maximum wait time in seconds
+        # Dynamic configuration based on source URL
+        crawl_config = _get_crawl_config_for_url(url, test_mode)
         
-        print(f"🕷️ Starting crawl of {url} (limit: {limit}, max_depth: {max_depth})")
+        # Use provided parameters or fall back to config
+        actual_max_depth = max_depth if max_depth is not None else crawl_config["max_depth"]
+        actual_limit = limit if limit is not None else crawl_config["limit"]
+        
+        poll_interval = 2  # seconds between status checks
+        max_wait_time = crawl_config["timeout"]
+        
+        print(f"🕷️ Starting crawl of {url} (limit: {actual_limit}, max_depth: {actual_max_depth})")
+        print(f"📋 Source type: {crawl_config['source_type']}, Wait time: {crawl_config['wait_for']}ms")
         
         # Create ScrapeOptions for the pages being crawled
         scrape_options = ScrapeOptions(
             formats=["markdown"],
             only_main_content=True,
-            wait_for=3000,
-            timeout=30000
+            wait_for=crawl_config["wait_for"],
+            timeout=crawl_config["page_timeout"]
         )
         
-        print(f"🔧 Calling app.crawl_url() with correct parameters...")
-        # Use the correct parameter structure from documentation
-        crawl_response = app.crawl_url(
-            url=url,
-            limit=limit,
-            max_depth=max_depth,
-            scrape_options=scrape_options,
-            poll_interval=poll_interval
+        print(f"🔧 Preparing crawl with retry logic...")
+        
+        # Use retry logic for the crawl operation
+        # Create a dummy crew instance just for the retry method
+        from types import SimpleNamespace
+        retry_helper = SimpleNamespace()
+        retry_helper._firecrawl_with_retry = lambda op_func, op_name, max_retries=3, retry_delay=5, **kwargs: _execute_firecrawl_with_retry(op_func, op_name, max_retries, retry_delay, **kwargs)
+        
+        def crawl_operation():
+            return app.crawl_url(
+                url=url,
+                limit=actual_limit,
+                max_depth=actual_max_depth,
+                scrape_options=scrape_options,
+                poll_interval=poll_interval
+            )
+        
+        # Execute with retry logic
+        crawl_response = _execute_firecrawl_with_retry(
+            operation_func=crawl_operation,
+            operation_name=f"crawl {url}",
+            max_retries=3,
+            retry_delay=5
         )
         
         print(f"✅ Crawl API call successful, got response type: {type(crawl_response)}")
@@ -194,6 +288,159 @@ def firecrawl_crawl_native(url, prompt, schema, test_mode=True):
         import traceback
         print(f"🔍 Traceback: {traceback.format_exc()}")
         return f"Error with Firecrawl crawler: {str(e)}"
+
+def _get_crawl_config_for_url(url: str, test_mode: bool = True) -> dict:
+    """Get optimized crawl configuration based on URL and source type.
+    
+    Args:
+        url: The URL being crawled
+        test_mode: Whether we're in test mode
+        
+    Returns:
+        Dictionary with crawl configuration parameters
+    """
+    # Source-specific configurations optimized for each Paraguayan data source
+    source_configs = {
+        "bva_emisores": {
+            "source_type": "BVA Emisores",
+            "max_depth": 3,  # Need deeper crawl for individual company pages
+            "limit": 15 if test_mode else 50,
+            "wait_for": 4000,  # Longer wait for dynamic content
+            "page_timeout": 35000,
+            "timeout": 180 if test_mode else 400
+        },
+        "bva_reports": {
+            "source_type": "BVA Reports",
+            "max_depth": 2,  # Reports are usually single-page
+            "limit": 10 if test_mode else 25,
+            "wait_for": 3000,
+            "page_timeout": 30000,
+            "timeout": 120 if test_mode else 300
+        },
+        "ine": {
+            "source_type": "INE Statistics",
+            "max_depth": 3,  # Need to navigate through category pages
+            "limit": 12 if test_mode else 40,
+            "wait_for": 5000,  # Statistical pages load slowly
+            "page_timeout": 40000,
+            "timeout": 200 if test_mode else 450
+        },
+        "datos_gov": {
+            "source_type": "Paraguay Open Data",
+            "max_depth": 2,  # Data portal structure
+            "limit": 10 if test_mode else 30,
+            "wait_for": 3500,
+            "page_timeout": 30000,
+            "timeout": 150 if test_mode else 350
+        },
+        "contrataciones": {
+            "source_type": "Public Contracts",
+            "max_depth": 2,  # Contract listings
+            "limit": 8 if test_mode else 25,
+            "wait_for": 4000,  # Database-driven content
+            "page_timeout": 35000,
+            "timeout": 160 if test_mode else 380
+        },
+        "dnit": {
+            "source_type": "DNIT Portal",
+            "max_depth": 2,  # Government portal
+            "limit": 8 if test_mode else 20,
+            "wait_for": 3000,
+            "page_timeout": 30000,
+            "timeout": 140 if test_mode else 320
+        }
+    }
+    
+    # Determine source type from URL
+    url_lower = url.lower()
+    
+    if "bolsadevalores.com.py/listado-de-emisores" in url_lower:
+        return source_configs["bva_emisores"]
+    elif "bolsadevalores.com.py" in url_lower:
+        return source_configs["bva_reports"]
+    elif "ine.gov.py" in url_lower:
+        return source_configs["ine"]
+    elif "datos.gov.py" in url_lower:
+        return source_configs["datos_gov"]
+    elif "contrataciones.gov.py" in url_lower:
+        return source_configs["contrataciones"]
+    elif "dnit.gov.py" in url_lower:
+        return source_configs["dnit"]
+    else:
+        # Default configuration for unknown sources
+        return {
+            "source_type": "Generic",
+            "max_depth": 2,
+            "limit": 10 if test_mode else 25,
+            "wait_for": 3000,
+            "page_timeout": 30000,
+            "timeout": 120 if test_mode else 300
+        }
+
+def _execute_firecrawl_with_retry(operation_func, operation_name: str, max_retries: int = 3, retry_delay: int = 5, **kwargs):
+    """Execute Firecrawl operations with exponential backoff retry logic for network resilience.
+    
+    Args:
+        operation_func: Function to execute (e.g., app.scrape_url or app.crawl_url)
+        operation_name: Name of operation for logging (e.g., "scrape", "crawl")
+        max_retries: Maximum number of retry attempts
+        retry_delay: Base delay between retries in seconds
+        **kwargs: Arguments to pass to the operation function
+        
+    Returns:
+        Result from Firecrawl operation
+        
+    Raises:
+        Exception: If all retry attempts fail
+    """
+    import time
+    
+    for attempt in range(max_retries):
+        try:
+            print(f"   ATTEMPT {attempt + 1}/{max_retries}: {operation_name} operation...")
+            result = operation_func(**kwargs) if kwargs else operation_func()
+            print(f"   SUCCESS: {operation_name} completed on attempt {attempt + 1}")
+            return result
+            
+        except Exception as e:
+            error_str = str(e).lower()
+            
+            # Check for network-related errors
+            if any(keyword in error_str for keyword in [
+                'connection', 'network', 'timeout', 'getaddrinfo', 'dns', 'resolve',
+                'connection aborted', 'remote end closed', 'remotedisconnected',
+                'connectionerror', 'httperror', 'requestexception'
+            ]):
+                if attempt < max_retries - 1:
+                    wait_time = retry_delay * (2 ** attempt)  # Exponential backoff
+                    print(f"   RETRY: Network error on attempt {attempt + 1}/{max_retries}: {e}")
+                    print(f"   WAIT: Retrying {operation_name} in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                    continue
+            
+            # Check for rate limiting or server overload
+            elif any(keyword in error_str for keyword in ['rate', 'quota', 'limit', '429', '503', '502']):
+                if attempt < max_retries - 1:
+                    wait_time = retry_delay * (2 ** attempt) + 15  # Longer delay for rate limits
+                    print(f"   RETRY: Rate/Server limit on attempt {attempt + 1}/{max_retries}: {e}")
+                    print(f"   WAIT: Retrying {operation_name} in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                    continue
+            
+            # Check for temporary server errors
+            elif any(keyword in error_str for keyword in ['500', '502', '503', '504', 'internal error', 'server error']):
+                if attempt < max_retries - 1:
+                    wait_time = retry_delay * (2 ** attempt) + 10
+                    print(f"   RETRY: Server error on attempt {attempt + 1}/{max_retries}: {e}")
+                    print(f"   WAIT: Retrying {operation_name} in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                    continue
+            
+            # Re-raise for non-retryable errors or final attempt
+            print(f"   FAILED: {operation_name} failed on attempt {attempt + 1}: {e}")
+            raise e
+    
+    raise Exception(f"Failed to complete {operation_name} after {max_retries} attempts")
 
 
 def format_crawl_results(data):
@@ -300,6 +547,132 @@ class InverbotPipelineDato():
             "errors": [],
             "warnings": []
         }
+
+    def _create_embedding_with_retry(self, text: str, max_retries: int = 3, retry_delay: int = 5):
+        """Create Gemini embedding with exponential backoff retry logic for network resilience.
+        
+        Args:
+            text: Text content to embed
+            max_retries: Maximum number of retry attempts
+            retry_delay: Base delay between retries in seconds
+            
+        Returns:
+            Embedding vector from Gemini API
+            
+        Raises:
+            Exception: If all retry attempts fail
+        """
+        import time
+        import google.generativeai as genai
+        
+        for attempt in range(max_retries):
+            try:
+                response = genai.embed_content(
+                    model="models/embedding-001",
+                    content=text.strip(),
+                    task_type="retrieval_document"
+                )
+                return response['embedding']
+                
+            except Exception as e:
+                error_str = str(e).lower()
+                
+                # Check for network-related errors
+                if any(keyword in error_str for keyword in ['connection', 'network', 'timeout', 'getaddrinfo', 'dns', 'resolve']):
+                    if attempt < max_retries - 1:
+                        wait_time = retry_delay * (2 ** attempt)  # Exponential backoff
+                        print(f"   RETRY: Network error on attempt {attempt + 1}/{max_retries}: {e}")
+                        print(f"   WAIT: Retrying in {wait_time} seconds...")
+                        time.sleep(wait_time)
+                        continue
+                
+                # Check for rate limiting
+                elif any(keyword in error_str for keyword in ['rate', 'quota', 'limit', '429']):
+                    if attempt < max_retries - 1:
+                        wait_time = retry_delay * (2 ** attempt) + 10  # Longer delay for rate limits
+                        print(f"   RETRY: Network error on attempt {attempt + 1}/{max_retries}: {e}")
+                        print(f"   WAIT: Retrying in {wait_time} seconds...")
+                        time.sleep(wait_time)
+                        continue
+                
+                # Check for temporary server errors
+                elif any(keyword in error_str for keyword in ['internal error', '500', '502', '503', '504']):
+                    if attempt < max_retries - 1:
+                        wait_time = retry_delay * (2 ** attempt) + 5
+                        print(f"   RETRY: Network error on attempt {attempt + 1}/{max_retries}: {e}")
+                        print(f"   WAIT: Retrying in {wait_time} seconds...")
+                        time.sleep(wait_time)
+                        continue
+                
+                # Re-raise for non-retryable errors or final attempt
+                raise e
+        
+        raise Exception(f"Failed to create embedding after {max_retries} attempts")
+
+    def _firecrawl_with_retry(self, operation_func, operation_name: str, max_retries: int = 3, retry_delay: int = 5, **kwargs):
+        """Execute Firecrawl operations with exponential backoff retry logic for network resilience.
+        
+        Args:
+            operation_func: Function to execute (e.g., app.scrape_url or app.crawl_url)
+            operation_name: Name of operation for logging (e.g., "scrape", "crawl")
+            max_retries: Maximum number of retry attempts
+            retry_delay: Base delay between retries in seconds
+            **kwargs: Arguments to pass to the operation function
+            
+        Returns:
+            Result from Firecrawl operation
+            
+        Raises:
+            Exception: If all retry attempts fail
+        """
+        import time
+        
+        for attempt in range(max_retries):
+            try:
+                print(f"   ATTEMPT {attempt + 1}/{max_retries}: {operation_name} operation...")
+                result = operation_func(**kwargs)
+                print(f"   SUCCESS: {operation_name} completed on attempt {attempt + 1}")
+                return result
+                
+            except Exception as e:
+                error_str = str(e).lower()
+                
+                # Check for network-related errors
+                if any(keyword in error_str for keyword in [
+                    'connection', 'network', 'timeout', 'getaddrinfo', 'dns', 'resolve',
+                    'connection aborted', 'remote end closed', 'remotedisconnected',
+                    'connectionerror', 'httperror', 'requestexception'
+                ]):
+                    if attempt < max_retries - 1:
+                        wait_time = retry_delay * (2 ** attempt)  # Exponential backoff
+                        print(f"   RETRY: Network error on attempt {attempt + 1}/{max_retries}: {e}")
+                        print(f"   WAIT: Retrying {operation_name} in {wait_time} seconds...")
+                        time.sleep(wait_time)
+                        continue
+                
+                # Check for rate limiting or server overload
+                elif any(keyword in error_str for keyword in ['rate', 'quota', 'limit', '429', '503', '502']):
+                    if attempt < max_retries - 1:
+                        wait_time = retry_delay * (2 ** attempt) + 15  # Longer delay for rate limits
+                        print(f"   RETRY: Rate/Server limit on attempt {attempt + 1}/{max_retries}: {e}")
+                        print(f"   WAIT: Retrying {operation_name} in {wait_time} seconds...")
+                        time.sleep(wait_time)
+                        continue
+                
+                # Check for temporary server errors
+                elif any(keyword in error_str for keyword in ['500', '502', '503', '504', 'internal error', 'server error']):
+                    if attempt < max_retries - 1:
+                        wait_time = retry_delay * (2 ** attempt) + 10
+                        print(f"   RETRY: Server error on attempt {attempt + 1}/{max_retries}: {e}")
+                        print(f"   WAIT: Retrying {operation_name} in {wait_time} seconds...")
+                        time.sleep(wait_time)
+                        continue
+                
+                # Re-raise for non-retryable errors or final attempt
+                print(f"   FAILED: {operation_name} failed on attempt {attempt + 1}: {e}")
+                raise e
+        
+        raise Exception(f"Failed to complete {operation_name} after {max_retries} attempts")
     
     def log_performance(self, message: str, level: str = "INFO"):
         """Log performance message with timestamp"""
@@ -1027,7 +1400,7 @@ class InverbotPipelineDato():
             return f"Error crawling INE Social: {str(e)}"
     
     @tool("Extract Structured Data from Raw Content")
-    def extract_structured_data_from_raw(raw_content: dict) -> dict:
+    def extract_structured_data_from_raw(self, raw_content: dict) -> dict:
         """Convert raw scraped content into structured database format.
         
         This tool takes the raw content extracted by scrapers and converts it into
@@ -1082,22 +1455,22 @@ class InverbotPipelineDato():
             
             # Analyze content type based on URL and content patterns
             source_url = metadata.get("url", "")
-            content_type = _identify_content_type(source_url, page_content)
+            content_type = self._identify_content_type(source_url, page_content)
             
             # Route processing based on content type
             if "bva" in source_url.lower():
-                structured_data, metrics = _process_bva_content(page_content, links, documents, structured_data)
+                structured_data, metrics = self._process_bva_content(page_content, links, documents, structured_data)
             elif "ine.gov.py" in source_url.lower():
-                structured_data, metrics = _process_ine_content(page_content, links, documents, structured_data)
+                structured_data, metrics = self._process_ine_content(page_content, links, documents, structured_data)
             elif "datos.gov.py" in source_url.lower():
-                structured_data, metrics = _process_datos_gov_content(page_content, links, documents, structured_data)
+                structured_data, metrics = self._process_datos_gov_content(page_content, links, documents, structured_data)
             elif "contrataciones.gov.py" in source_url.lower():
-                structured_data, metrics = _process_contracts_content(page_content, links, documents, structured_data)
+                structured_data, metrics = self._process_contracts_content(page_content, links, documents, structured_data)
             elif "dnit.gov.py" in source_url.lower():
-                structured_data, metrics = _process_dnit_content(page_content, links, documents, structured_data)
+                structured_data, metrics = self._process_dnit_content(page_content, links, documents, structured_data)
             else:
                 # Generic processing for unknown sources
-                structured_data, metrics = _process_generic_content(page_content, links, documents, structured_data)
+                structured_data, metrics = self._process_generic_content(page_content, links, documents, structured_data)
             
             # Update processing report
             processing_report["records_extracted"] = sum(len(records) for records in structured_data.values())
@@ -1140,7 +1513,7 @@ class InverbotPipelineDato():
                 }
             }
 
-    def _identify_content_type(url: str, content: str) -> str:
+    def _identify_content_type(self, url: str, content: str) -> str:
         """Identify the type of content based on URL and content patterns."""
         url_lower = url.lower()
         content_lower = content.lower()
@@ -1175,7 +1548,7 @@ class InverbotPipelineDato():
         else:
             return "Unknown_Source"
 
-    def _process_bva_content(content: str, links: list, documents: list, structured_data: dict) -> tuple:
+    def _process_bva_content(self, content: str, links: list, documents: list, structured_data: dict) -> tuple:
         """Process BVA (stock exchange) content into structured format."""
         metrics = {"processing_method": "BVA_content_analysis"}
         
@@ -1245,7 +1618,7 @@ class InverbotPipelineDato():
         
         return structured_data, metrics
 
-    def _process_ine_content(content: str, links: list, documents: list, structured_data: dict) -> tuple:
+    def _process_ine_content(self, content: str, links: list, documents: list, structured_data: dict) -> tuple:
         """Process INE (statistics institute) content into structured format."""
         metrics = {"processing_method": "INE_content_analysis"}
         
@@ -1288,7 +1661,7 @@ class InverbotPipelineDato():
         
         return structured_data, metrics
 
-    def _process_datos_gov_content(content: str, links: list, documents: list, structured_data: dict) -> tuple:
+    def _process_datos_gov_content(self, content: str, links: list, documents: list, structured_data: dict) -> tuple:
         """Process open data portal content into structured format."""
         metrics = {"processing_method": "open_data_analysis"}
         
@@ -1306,7 +1679,7 @@ class InverbotPipelineDato():
         
         return structured_data, metrics
 
-    def _process_contracts_content(content: str, links: list, documents: list, structured_data: dict) -> tuple:
+    def _process_contracts_content(self, content: str, links: list, documents: list, structured_data: dict) -> tuple:
         """Process public contracts content into structured format."""
         metrics = {"processing_method": "contracts_analysis"}
         
@@ -1327,7 +1700,7 @@ class InverbotPipelineDato():
         
         return structured_data, metrics
 
-    def _process_dnit_content(content: str, links: list, documents: list, structured_data: dict) -> tuple:
+    def _process_dnit_content(self, content: str, links: list, documents: list, structured_data: dict) -> tuple:
         """Process DNIT investment/financial content into structured format."""
         metrics = {"processing_method": "DNIT_analysis"}
         
@@ -1344,7 +1717,7 @@ class InverbotPipelineDato():
         
         return structured_data, metrics
 
-    def _process_generic_content(content: str, links: list, documents: list, structured_data: dict) -> tuple:
+    def _process_generic_content(self, content: str, links: list, documents: list, structured_data: dict) -> tuple:
         """Generic processing for unknown content types."""
         metrics = {"processing_method": "generic_analysis"}
         
@@ -3010,13 +3383,13 @@ class InverbotPipelineDato():
             
             
             # Initialize Pinecone (nueva sintaxis)
-            pc = Pinecone(api_key=pinecone_api_key)
+            pinecone.init(api_key=pinecone_api_key)
             
             # Verificar si el índice existe
-            if index_name not in [idx.name for idx in pc.list_indexes()]:
+            if index_name not in [idx.name for idx in pinecone.list_indexes()]:
                 return {"error": f"Index '{index_name}' does not exist in Pinecone"}
             
-            index = pc.Index(index_name)
+            index = pinecone.Index(index_name)
             
             filtered_data = {
                 "new_vectors": [],
@@ -3093,7 +3466,7 @@ class InverbotPipelineDato():
     
     @tool("Supabase Data Loading Tool")
     def load_data_to_supabase(table_name: str, data: list, test_mode: bool = None) -> str:
-        """Load structured data into a Supabase table or save to file in test mode.
+        """Load structured data into a Supabase table with duplicate detection and ID collision prevention.
         
         Args:
             table_name: Name of the table to load data into
@@ -3103,6 +3476,9 @@ class InverbotPipelineDato():
         Returns:
             Loading report as JSON string
         """
+        import uuid
+        from datetime import datetime
+        
         # Use class test_mode if not specified
         if test_mode is None:
             test_mode = self.test_mode
@@ -3110,19 +3486,45 @@ class InverbotPipelineDato():
         if not data:
             return json.dumps({"error": "No data provided to load"})
         
+        # Define unique fields for duplicate detection
+        table_unique_fields = {
+            "Categoria_Emisor": ["categoria_emisor"],
+            "Emisores": ["nombre_emisor"],
+            "Moneda": ["codigo_moneda"],
+            "Frecuencia": ["nombre_frecuencia"],
+            "Tipo_Informe": ["nombre_tipo_informe"],
+            "Periodo_Informe": ["nombre_periodo"],
+            "Unidad_Medida": ["simbolo"],
+            "Instrumento": ["simbolo_instrumento"],
+            "Informe_General": ["titulo_informe", "fecha_publicacion"],
+            "Resumen_Informe_Financiero": ["id_informe", "fecha_corte_informe"],
+            "Dato_Macroeconomico": ["indicador_nombre", "fecha_dato", "id_emisor"],
+            "Movimiento_Diario_Bolsa": ["fecha_operacion", "id_instrumento", "id_emisor"],
+            "Licitacion_Contrato": ["titulo", "fecha_adjudicacion"]
+        }
+        
         # TEST MODE: Save to markdown file instead of database
         if test_mode:
             try:
                 os.makedirs("output/test_results", exist_ok=True)
                 
-                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 filename = f"output/test_results/supabase_{table_name}_{timestamp}.md"
+                
+                # Add UUIDs to records for testing
+                for record in data:
+                    if 'id' not in record or not record['id']:
+                        # Generate UUID based on table's primary key name
+                        id_field = self._get_primary_key_field(table_name)
+                        if id_field and id_field not in record:
+                            record[id_field] = str(uuid.uuid4())[:8]  # Short UUID for readability
                 
                 with open(filename, 'w', encoding='utf-8') as f:
                     f.write(f"# Supabase Test Mode Output - {table_name}\n\n")
-                    f.write(f"**Timestamp**: {datetime.datetime.now().isoformat()}\n")
+                    f.write(f"**Timestamp**: {datetime.now().isoformat()}\n")
                     f.write(f"**Table**: {table_name}\n")
-                    f.write(f"**Records Count**: {len(data)}\n\n")
+                    f.write(f"**Records Count**: {len(data)}\n")
+                    f.write(f"**Duplicate Detection Fields**: {table_unique_fields.get(table_name, 'None')}\n\n")
                     f.write("## Data Preview (First 5 Records)\n\n")
                     
                     for i, record in enumerate(data[:5]):
@@ -3151,7 +3553,7 @@ class InverbotPipelineDato():
             except Exception as e:
                 return json.dumps({"error": f"Test mode file save failed: {str(e)}"})
         
-        # PRODUCTION MODE: Actual database loading
+        # PRODUCTION MODE: Actual database loading with duplicate detection
         supabase_url = os.getenv("SUPABASE_URL")
         supabase_key = os.getenv("SUPABASE_KEY")
         
@@ -3159,53 +3561,89 @@ class InverbotPipelineDato():
             return json.dumps({"error": "Supabase credentials not found in environment variables"})
         
         try:
-            # Initialize Supabase client - FIX: usar supabase_key en lugar de supabase_url
+            # Initialize Supabase client
             supabase = create_client(supabase_url, supabase_key)
             
             loading_report = {
                 "table": table_name,
                 "total_records": len(data),
                 "inserted": 0,
-                "skipped": 0,
+                "updated": 0,
+                "skipped_duplicates": 0,
                 "errors": [],
-                "batches_processed": 0
+                "batches_processed": 0,
+                "duplicate_detection": table_unique_fields.get(table_name, [])
             }
             
-            # Validar estructura de datos
+            # Validate data structure
             if not isinstance(data, list) or not all(isinstance(record, dict) for record in data):
                 return json.dumps({"error": "Data must be a list of dictionaries"})
             
-            # Process in smaller batches para evitar timeouts
-            batch_size = 50  # Reducir batch size
-            total_batches = (len(data) + batch_size - 1) // batch_size
+            # Get unique fields for this table
+            unique_fields = table_unique_fields.get(table_name, [])
             
+            # Process records with duplicate detection
+            batch_size = 50
             for i in range(0, len(data), batch_size):
                 batch = data[i:i+batch_size]
                 loading_report["batches_processed"] += 1
                 
-                try:
-                    # Intentar inserción por lotes primero
-                    result = supabase.table(table_name).insert(batch).execute()
-                    loading_report["inserted"] += len(batch)
-                    
-                except Exception as batch_error:
-                    # Si falla el lote, intentar uno por uno
-                    for j, record in enumerate(batch):
-                        try:
-                            result = supabase.table(table_name).insert(record).execute()
-                            loading_report["inserted"] += 1
-                        except Exception as record_error:
-                            loading_report["skipped"] += 1
-                            loading_report["errors"].append({
-                                "batch": loading_report["batches_processed"],
-                                "record_index": i + j,
-                                "record": record,
-                                "error": str(record_error)
-                            })
+                for j, record in enumerate(batch):
+                    try:
+                        # Add UUID if ID field is missing
+                        id_field = self._get_primary_key_field(table_name)
+                        if id_field and (id_field not in record or not record[id_field]):
+                            # Generate deterministic ID based on unique fields to prevent collisions
+                            if unique_fields and all(field in record for field in unique_fields):
+                                # Create hash from unique fields for consistent IDs
+                                unique_str = "_".join(str(record[field]) for field in unique_fields)
+                                record[id_field] = str(uuid.uuid5(uuid.NAMESPACE_DNS, unique_str))[:8]
+                            else:
+                                # Fallback to random UUID
+                                record[id_field] = str(uuid.uuid4())[:8]
+                        
+                        # Check for duplicates if unique fields are defined
+                        if unique_fields and all(field in record for field in unique_fields):
+                            # Build query to check for existing record
+                            query = supabase.table(table_name).select("*")
+                            for field in unique_fields:
+                                query = query.eq(field, record[field])
+                            
+                            existing = query.execute()
+                            
+                            if existing.data and len(existing.data) > 0:
+                                # Record exists - try upsert/update
+                                if id_field and id_field in existing.data[0]:
+                                    # Update existing record
+                                    record[id_field] = existing.data[0][id_field]
+                                    result = supabase.table(table_name).update(record).eq(id_field, record[id_field]).execute()
+                                    loading_report["updated"] += 1
+                                else:
+                                    loading_report["skipped_duplicates"] += 1
+                                continue
+                        
+                        # Insert new record
+                        result = supabase.table(table_name).insert(record).execute()
+                        loading_report["inserted"] += 1
+                        
+                    except Exception as record_error:
+                        loading_report["errors"].append({
+                            "batch": loading_report["batches_processed"],
+                            "record_index": i + j,
+                            "error": str(record_error),
+                            "record_preview": {k: str(v)[:50] for k, v in list(record.items())[:3]}
+                        })
             
-            # Agregar estadísticas finales
-            loading_report["success_rate"] = (loading_report["inserted"] / loading_report["total_records"]) * 100
+            # Add final statistics
+            total_processed = loading_report["inserted"] + loading_report["updated"] + loading_report["skipped_duplicates"]
+            loading_report["success_rate"] = (total_processed / loading_report["total_records"]) * 100 if loading_report["total_records"] > 0 else 0
             loading_report["status"] = "completed"
+            loading_report["summary"] = {
+                "new_records": loading_report["inserted"],
+                "updated_records": loading_report["updated"],
+                "duplicate_skips": loading_report["skipped_duplicates"],
+                "failed_records": len(loading_report["errors"])
+            }
             
             return json.dumps(loading_report, indent=2)
             
@@ -3216,10 +3654,257 @@ class InverbotPipelineDato():
                 "status": "failed"
             })
 
+    def _get_primary_key_field(self, table_name: str) -> str:
+        """Get the primary key field name for a given table.
+        
+        Args:
+            table_name: Name of the Supabase table
+            
+        Returns:
+            Primary key field name or None
+        """
+        primary_keys = {
+            "Categoria_Emisor": "id_categoria_emisor",
+            "Emisores": "id_emisor",
+            "Moneda": "id_moneda",
+            "Frecuencia": "id_frecuencia",
+            "Tipo_Informe": "id_tipo_informe",
+            "Periodo_Informe": "id_periodo",
+            "Unidad_Medida": "id_unidad_medida",
+            "Instrumento": "id_instrumento",
+            "Informe_General": "id_informe",
+            "Resumen_Informe_Financiero": "id_resumen_financiero",
+            "Dato_Macroeconomico": "id_dato_macro",
+            "Movimiento_Diario_Bolsa": "id_operacion",
+            "Licitacion_Contrato": "id_licitacion_contrato"
+        }
+        return primary_keys.get(table_name)
+
+    @tool("Database Connectivity Validator")
+    def validate_production_config(self, test_mode: bool = None) -> str:
+        """Validate all production configurations and database connectivity.
+        
+        Args:
+            test_mode: If True, perform safe validation without writes
+            
+        Returns:
+            Validation report as JSON string
+        """
+        if test_mode is None:
+            test_mode = self.test_mode
+            
+        validation_report = {
+            "timestamp": datetime.datetime.now().isoformat(),
+            "test_mode": test_mode,
+            "environment_variables": {},
+            "database_connectivity": {},
+            "api_limits": {},
+            "overall_status": "pending",
+            "recommendations": [],
+            "errors": [],
+            "warnings": []
+        }
+        
+        try:
+            # 1. Environment Variables Check
+            env_vars = {
+                "SUPABASE_URL": os.getenv("SUPABASE_URL"),
+                "SUPABASE_KEY": os.getenv("SUPABASE_KEY"),
+                "PINECONE_API_KEY": os.getenv("PINECONE_API_KEY"),
+                "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY"),
+                "FIRECRAWL_API_KEY": os.getenv("FIRECRAWL_API_KEY")
+            }
+            
+            for var, value in env_vars.items():
+                validation_report["environment_variables"][var] = {
+                    "status": "✅ Present" if value else "❌ Missing",
+                    "length": len(value) if value else 0
+                }
+                if not value:
+                    validation_report["errors"].append(f"Missing environment variable: {var}")
+            
+            # 2. Supabase Connectivity Test
+            if env_vars["SUPABASE_URL"] and env_vars["SUPABASE_KEY"]:
+                try:
+                    supabase = create_client(env_vars["SUPABASE_URL"], env_vars["SUPABASE_KEY"])
+                    
+                    if test_mode:
+                        # Safe read-only test
+                        result = supabase.table("Categoria_Emisor").select("*").limit(1).execute()
+                        validation_report["database_connectivity"]["supabase"] = {
+                            "status": "✅ Connected",
+                            "test": "Read test successful",
+                            "tables_accessible": True
+                        }
+                    else:
+                        # Production test with minimal write/delete
+                        test_record = {
+                            "id_categoria_emisor": 99999,
+                            "categoria_emisor": "TEST_VALIDATION_RECORD"
+                        }
+                        # Insert test record
+                        insert_result = supabase.table("Categoria_Emisor").insert(test_record).execute()
+                        # Delete test record
+                        delete_result = supabase.table("Categoria_Emisor").delete().eq("id_categoria_emisor", 99999).execute()
+                        
+                        validation_report["database_connectivity"]["supabase"] = {
+                            "status": "✅ Connected",
+                            "test": "Write/Delete test successful",
+                            "can_write": True,
+                            "can_delete": True
+                        }
+                        
+                except Exception as e:
+                    validation_report["database_connectivity"]["supabase"] = {
+                        "status": "❌ Failed",
+                        "error": str(e)
+                    }
+                    validation_report["errors"].append(f"Supabase connection failed: {str(e)}")
+            
+            # 3. Pinecone Connectivity Test
+            if env_vars["PINECONE_API_KEY"]:
+                try:
+                    import pinecone
+                    pinecone.init(api_key=env_vars["PINECONE_API_KEY"])
+                    
+                    # List indexes
+                    indexes = [idx.name for idx in pinecone.list_indexes()]
+                    required_indexes = ["documentos-informes-vector", "dato-macroeconomico-vector", "licitacion-contrato-vector"]
+                    
+                    missing_indexes = [idx for idx in required_indexes if idx not in indexes]
+                    
+                    if test_mode:
+                        # Safe read-only test
+                        if indexes and indexes[0]:
+                            test_index = pinecone.Index(indexes[0])
+                            stats = test_index.describe_index_stats()
+                            validation_report["database_connectivity"]["pinecone"] = {
+                                "status": "✅ Connected",
+                                "available_indexes": indexes,
+                                "missing_indexes": missing_indexes,
+                                "test_stats": stats
+                            }
+                        else:
+                            validation_report["database_connectivity"]["pinecone"] = {
+                                "status": "⚠️ No indexes found",
+                                "available_indexes": indexes,
+                                "missing_indexes": missing_indexes
+                            }
+                    else:
+                        # Production test with vector operations
+                        if "documentos-informes-vector" in indexes:
+                            test_index = pinecone.Index("documentos-informes-vector")
+                            # Test upsert and delete
+                            test_vector = {
+                                "id": "validation_test_vector",
+                                "values": [0.1] * 768,  # 768 dimensions for Gemini
+                                "metadata": {"test": "validation"}
+                            }
+                            test_index.upsert(vectors=[test_vector])
+                            test_index.delete(ids=["validation_test_vector"])
+                            
+                            validation_report["database_connectivity"]["pinecone"] = {
+                                "status": "✅ Connected",
+                                "available_indexes": indexes,
+                                "missing_indexes": missing_indexes,
+                                "can_write": True,
+                                "can_delete": True
+                            }
+                        else:
+                            validation_report["database_connectivity"]["pinecone"] = {
+                                "status": "❌ Missing required indexes",
+                                "available_indexes": indexes,
+                                "missing_indexes": missing_indexes
+                            }
+                            validation_report["errors"].append(f"Missing Pinecone indexes: {missing_indexes}")
+                    
+                except Exception as e:
+                    validation_report["database_connectivity"]["pinecone"] = {
+                        "status": "❌ Failed",
+                        "error": str(e)
+                    }
+                    validation_report["errors"].append(f"Pinecone connection failed: {str(e)}")
+            
+            # 4. Gemini API Test
+            if env_vars["GEMINI_API_KEY"]:
+                try:
+                    import google.generativeai as genai
+                    genai.configure(api_key=env_vars["GEMINI_API_KEY"])
+                    
+                    # Test embedding creation with retry logic
+                    embedding = self._create_embedding_with_retry("Test validation text", max_retries=2, retry_delay=3)
+                    
+                    validation_report["api_limits"]["gemini"] = {
+                        "status": "✅ Connected",
+                        "embedding_dimensions": len(embedding),
+                        "model": "models/embedding-001"
+                    }
+                    
+                except Exception as e:
+                    validation_report["api_limits"]["gemini"] = {
+                        "status": "❌ Failed",
+                        "error": str(e)
+                    }
+                    validation_report["errors"].append(f"Gemini API failed: {str(e)}")
+            
+            # 5. Firecrawl API Test
+            if env_vars["FIRECRAWL_API_KEY"]:
+                try:
+                    app = get_firecrawl_app()
+                    # Test with a simple, fast URL
+                    result = app.scrape_url(
+                        url="https://httpbin.org/json",
+                        formats=["markdown"],
+                        wait_for=1000,
+                        timeout=10000
+                    )
+                    
+                    validation_report["api_limits"]["firecrawl"] = {
+                        "status": "✅ Connected",
+                        "test_result": "Successfully scraped test URL"
+                    }
+                    
+                except Exception as e:
+                    validation_report["api_limits"]["firecrawl"] = {
+                        "status": "❌ Failed", 
+                        "error": str(e)
+                    }
+                    validation_report["errors"].append(f"Firecrawl API failed: {str(e)}")
+            
+            # 6. Generate Recommendations
+            if not validation_report["errors"]:
+                validation_report["overall_status"] = "✅ Ready for Production"
+                validation_report["recommendations"] = [
+                    "All systems operational - ready for production deployment",
+                    "Consider monitoring API usage during first production run",
+                    "Backup current data before large-scale operations"
+                ]
+            elif len(validation_report["errors"]) <= 2:
+                validation_report["overall_status"] = "⚠️ Minor Issues"
+                validation_report["recommendations"] = [
+                    "Address the identified issues before production",
+                    "Most systems are operational",
+                    "Consider test mode for problematic components"
+                ]
+            else:
+                validation_report["overall_status"] = "❌ Not Ready"
+                validation_report["recommendations"] = [
+                    "Multiple critical issues identified",
+                    "Do not proceed with production until resolved",
+                    "Review environment variable configuration"
+                ]
+            
+            return json.dumps(validation_report, indent=2)
+            
+        except Exception as e:
+            validation_report["overall_status"] = "❌ Validation Failed"
+            validation_report["errors"].append(f"Validation process error: {str(e)}")
+            return json.dumps(validation_report, indent=2)
+
 
     @tool("Pinecone Vector Loading Tool")
     def load_vectors_to_pinecone(index_name: str, vector_data: list, test_mode: bool = None) -> str:
-        """Generate embeddings and load vector data into Pinecone or save to file in test mode.
+        """Generate embeddings and load vector data into Pinecone with duplicate detection.
         
         Args:
             index_name: Name of the Pinecone index
@@ -3229,6 +3914,11 @@ class InverbotPipelineDato():
         Returns:
             Loading report as JSON string
         """
+        import hashlib
+        import uuid
+        import time
+        from datetime import datetime
+        
         # Use class test_mode if not specified
         if test_mode is None:
             test_mode = self.test_mode
@@ -3236,19 +3926,35 @@ class InverbotPipelineDato():
         if not vector_data:
             return json.dumps({"error": "No vector data provided to load"})
         
+        # Define unique field mapping for duplicate detection in vectors
+        unique_field_mapping = {
+            "documentos-informes-vector": ["id_informe", "chunk_id"],
+            "dato-macroeconomico-vector": ["id_dato_macro", "chunk_id"],
+            "licitacion-contrato-vector": ["id_licitacion_contrato", "chunk_id"]
+        }
+        
         # TEST MODE: Save to markdown file instead of database
         if test_mode:
             try:
                 os.makedirs("output/test_results", exist_ok=True)
                 
-                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 filename = f"output/test_results/pinecone_{index_name}_{timestamp}.md"
+                
+                # Generate deterministic IDs for vectors
+                for vector in vector_data:
+                    if 'id' not in vector or not vector['id']:
+                        # Generate ID based on content hash to prevent duplicates
+                        content_hash = hashlib.sha256(vector.get('text', '').encode()).hexdigest()[:12]
+                        chunk_id = vector.get('metadata', {}).get('chunk_id', '0')
+                        vector['id'] = f"{content_hash}_{chunk_id}"
                 
                 with open(filename, 'w', encoding='utf-8') as f:
                     f.write(f"# Pinecone Test Mode Output - {index_name}\n\n")
-                    f.write(f"**Timestamp**: {datetime.datetime.now().isoformat()}\n")
+                    f.write(f"**Timestamp**: {datetime.now().isoformat()}\n")
                     f.write(f"**Index**: {index_name}\n")
-                    f.write(f"**Vector Count**: {len(vector_data)}\n\n")
+                    f.write(f"**Vector Count**: {len(vector_data)}\n")
+                    f.write(f"**Duplicate Detection Fields**: {unique_field_mapping.get(index_name, 'content-hash')}\n\n")
                     f.write("## Vector Data Preview (First 3 Vectors)\n\n")
                     
                     for i, vector in enumerate(vector_data[:3]):
@@ -3285,46 +3991,55 @@ class InverbotPipelineDato():
             except Exception as e:
                 return json.dumps({"error": f"Test mode file save failed: {str(e)}"})
         
-        # PRODUCTION MODE: Actual vector loading
+        # PRODUCTION MODE: Actual vector loading with duplicate detection
         pinecone_api_key = os.getenv("PINECONE_API_KEY")
-        gemini_api_key = os.getenv("GEMINI_API_KEY")  
+        gemini_api_key = os.getenv("GEMINI_API_KEY")
         
         if not pinecone_api_key:
             return json.dumps({"error": "Pinecone API key not found in environment variables"})
         
-        if not gemini_api_key:  # Cambio aquí
+        if not gemini_api_key:
             return json.dumps({"error": "Gemini API key not found in environment variables"})
         
+# Using class method _create_embedding_with_retry instead of inline function
+        
         try:
-            # Initialize Pinecone y Gemini
-            from pinecone import Pinecone
-            import google.generativeai as genai  # Cambio aquí
+            # Initialize Pinecone and Gemini
+            import pinecone
+            import google.generativeai as genai
             
-            pc = Pinecone(api_key=pinecone_api_key)
-            genai.configure(api_key=gemini_api_key)  # Nueva configuración
+            pinecone.init(api_key=pinecone_api_key)
+            genai.configure(api_key=gemini_api_key)
             
             # Check if index exists
-            if index_name not in [idx.name for idx in pc.list_indexes()]:
+            if index_name not in [idx.name for idx in pinecone.list_indexes()]:
                 return json.dumps({"error": f"Index '{index_name}' does not exist in Pinecone"})
             
-            index = pc.Index(index_name)
+            index = pinecone.Index(index_name)
             
             loading_report = {
                 "index": index_name,
                 "total_vectors": len(vector_data),
                 "processed": 0,
                 "loaded": 0,
+                "skipped_duplicates": 0,
+                "updated": 0,
                 "errors": [],
+                "retries": 0,
                 "batches_processed": 0,
-                "embedding_model": "models/embedding-001"  # Cambio aquí
+                "embedding_model": "models/embedding-001",
+                "duplicate_detection": unique_field_mapping.get(index_name, ["content-hash"])
             }
             
-            # Validar estructura de vector_data
+            # Validate vector data structure
             for i, entry in enumerate(vector_data[:5]):
                 if not all(key in entry for key in ["text", "id", "metadata"]):
                     return json.dumps({
                         "error": f"Invalid vector data structure at index {i}. Required keys: 'text', 'id', 'metadata'"
                     })
+            
+            # Get unique fields for this index
+            unique_fields = unique_field_mapping.get(index_name, [])
             
             # Process in smaller batches
             batch_size = 20
@@ -3334,10 +4049,12 @@ class InverbotPipelineDato():
                 vectors_to_upsert = []
                 loading_report["batches_processed"] += 1
                 
+                print(f"Processing batch {loading_report['batches_processed']} ({len(batch)} vectors)...")
+                
                 # Create embeddings for batch
                 for entry in batch:
                     try:
-                        # Validar que el texto no esté vacío
+                        # Validate text content
                         if not entry["text"] or not entry["text"].strip():
                             loading_report["errors"].append({
                                 "vector_id": entry.get("id", "unknown"),
@@ -3345,26 +4062,68 @@ class InverbotPipelineDato():
                             })
                             continue
                         
-                        # Create embedding con Gemini
-                        response = genai.embed_content(
-                            model="models/embedding-001",
-                            content=entry["text"].strip(),
-                            task_type="retrieval_document"  # Para documentos
-                        )
-                        embedding = response['embedding']
+                        # Generate deterministic ID if missing
+                        if not entry.get("id"):
+                            content_hash = hashlib.sha256(entry["text"].encode()).hexdigest()[:12]
+                            chunk_id = entry.get("metadata", {}).get("chunk_id", "0")
+                            entry["id"] = f"{content_hash}_{chunk_id}"
                         
-                        # Validar dimensiones del embedding (768 para Gemini)
+                        # Check for duplicates based on unique fields in metadata
+                        vector_id = str(entry["id"])
+                        
+                        # Try to fetch existing vector
+                        try:
+                            existing_vectors = index.fetch(ids=[vector_id])
+                            if existing_vectors and existing_vectors.get("vectors") and vector_id in existing_vectors["vectors"]:
+                                # Vector exists - check if we should update
+                                existing_metadata = existing_vectors["vectors"][vector_id].get("metadata", {})
+                                
+                                # Compare unique fields
+                                is_duplicate = True
+                                if unique_fields:
+                                    for field in unique_fields:
+                                        if field in entry.get("metadata", {}) and field in existing_metadata:
+                                            if entry["metadata"][field] != existing_metadata[field]:
+                                                is_duplicate = False
+                                                break
+                                
+                                if is_duplicate:
+                                    loading_report["skipped_duplicates"] += 1
+                                    continue
+                                else:
+                                    # Update existing vector
+                                    loading_report["updated"] += 1
+                        except:
+                            # Vector doesn't exist, proceed with insertion
+                            pass
+                        
+                        # Create embedding with retry logic
+                        try:
+                            embedding = self._create_embedding_with_retry(entry["text"], max_retries=3, retry_delay=5)
+                        except Exception as e:
+                            loading_report["errors"].append({
+                                "vector_id": vector_id,
+                                "error": f"Embedding creation failed after retries: {str(e)}"
+                            })
+                            continue
+                        
+                        # Validate embedding dimensions (768 for Gemini)
                         if len(embedding) != 768:
                             loading_report["errors"].append({
-                                "vector_id": entry["id"],
+                                "vector_id": vector_id,
                                 "error": f"Invalid embedding dimension: {len(embedding)}"
                             })
                             continue
                         
+                        # Add metadata for duplicate tracking
+                        metadata = entry.get("metadata", {})
+                        metadata["created_at"] = datetime.now().isoformat()
+                        metadata["text_hash"] = hashlib.sha256(entry["text"].encode()).hexdigest()[:8]
+                        
                         vectors_to_upsert.append({
-                            "id": str(entry["id"]),
+                            "id": vector_id,
                             "values": embedding,
-                            "metadata": entry["metadata"]
+                            "metadata": metadata
                         })
                         
                         loading_report["processed"] += 1
@@ -3372,7 +4131,7 @@ class InverbotPipelineDato():
                     except Exception as e:
                         loading_report["errors"].append({
                             "vector_id": entry.get("id", "unknown"),
-                            "error": f"Embedding creation failed: {str(e)}"
+                            "error": f"Vector processing failed: {str(e)}"
                         })
                 
                 # Upsert vectors if any were created successfully
@@ -3380,15 +4139,24 @@ class InverbotPipelineDato():
                     try:
                         index.upsert(vectors=vectors_to_upsert)
                         loading_report["loaded"] += len(vectors_to_upsert)
+                        print(f"Batch {loading_report['batches_processed']}: {len(vectors_to_upsert)} vectors loaded successfully")
                     except Exception as e:
                         loading_report["errors"].append({
                             "batch": loading_report["batches_processed"],
                             "error": f"Upsert failed: {str(e)}"
                         })
             
-            # Estadísticas finales
-            loading_report["success_rate"] = (loading_report["loaded"] / loading_report["total_vectors"]) * 100 if loading_report["total_vectors"] > 0 else 0
+            # Final statistics
+            total_processed = loading_report["loaded"] + loading_report["updated"] + loading_report["skipped_duplicates"]
+            loading_report["success_rate"] = (total_processed / loading_report["total_vectors"]) * 100 if loading_report["total_vectors"] > 0 else 0
             loading_report["status"] = "completed"
+            loading_report["summary"] = {
+                "new_vectors": loading_report["loaded"],
+                "updated_vectors": loading_report["updated"],
+                "duplicate_skips": loading_report["skipped_duplicates"],
+                "failed_vectors": len(loading_report["errors"]),
+                "retry_attempts": loading_report["retries"]
+            }
             
             return json.dumps(loading_report, indent=2)
             
@@ -3467,10 +4235,10 @@ class InverbotPipelineDato():
         # Check Pinecone status
         if pinecone_api_key:
             try:
-                from pinecone import Pinecone
-                pc = Pinecone(api_key=pinecone_api_key)
+                import pinecone
+                pinecone.init(api_key=pinecone_api_key)
                 
-                available_indexes = [idx.name for idx in pc.list_indexes()]
+                available_indexes = [idx.name for idx in pinecone.list_indexes()]
                 status_report["pinecone_status"]["available_indexes"] = available_indexes
                 
                 # Si no se especifican índices, usar los del esquema
@@ -3484,7 +4252,7 @@ class InverbotPipelineDato():
                 for index_name in indexes_to_check:
                     try:
                         if index_name in available_indexes:
-                            index = pc.Index(index_name)
+                            index = pinecone.Index(index_name)
                             stats = index.describe_index_stats()
                             
                             vector_count = stats.get("total_vector_count", 0)
