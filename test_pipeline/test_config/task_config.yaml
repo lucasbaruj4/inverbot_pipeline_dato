@@ -1,0 +1,125 @@
+extract_task:
+  description: >
+    Extract raw content from 2 key BVA sources for comprehensive pipeline testing.
+    
+    Use these 2 scraping tools to gather content:
+    
+    1. **BVA Daily Reports Scraper**: Extract content from daily market reports
+       - Focus on capturing page content, links, and any document URLs
+       - Gather market data, company information, and trading reports
+    
+    2. **BVA Monthly Reports Scraper**: Extract content from monthly market summaries
+       - Focus on capturing comprehensive monthly data
+       - Pay special attention to PDF and Excel document links for downstream processing
+       - Extract detailed market summaries and company reports
+    
+    For both sources:
+    - Capture complete page content with all text and data
+    - Extract all links found on the pages
+    - Identify and collect document URLs (PDFs, Excel files)
+    - Include metadata with source URL and timestamp
+    
+    This raw content will be used by the processor agent for document extraction and structuring.
+    
+  expected_output: >
+    Raw content structure organized by source with comprehensive content capture:
+    {
+      "bva_daily_content": {
+        "page_content": "Complete text content from daily reports page",
+        "links": ["array of all URLs found"],
+        "documents": ["array of PDF/Excel document URLs"],
+        "metadata": {"url": "source URL", "source_type": "bva_daily", "timestamp": "ISO timestamp"}
+      },
+      "bva_monthly_content": {
+        "page_content": "Complete text content from monthly reports page", 
+        "links": ["array of all URLs found"],
+        "documents": ["array of PDF/Excel document URLs"],
+        "metadata": {"url": "source URL", "source_type": "bva_monthly", "timestamp": "ISO timestamp"}
+      },
+      "extraction_summary": {
+        "sources_processed": 2,
+        "total_content_length": "number of characters",
+        "total_links_found": "number of links",
+        "total_documents_found": "number of documents"
+      }
+    }
+
+process_task:
+  description: >
+    Process raw extracted content through complete pipeline to create structured data.
+    
+    IMPORTANT: Execute tools in this specific order:
+    
+    1. **First: Extract Documents** (if any PDF/Excel URLs found in raw content)
+       - Use "Extract Text from PDF" for any PDF documents found
+       - Use "Extract Text from Excel" for any Excel documents found
+       - This provides document text content for structuring
+    
+    2. **Then: Structure All Content**
+       - Use "Extract Structured Data from Raw Content" to process both:
+         * Raw page content from scrapers
+         * Extracted document text from step 1
+       - Convert all content into structured database format for 14 tables
+    
+    3. **Finally: Clean and Validate**
+       - Use "Normalize Data Tool" to clean and standardize the structured data
+       - Use "Validate Data Tool" to ensure data meets schema requirements
+    
+    Focus on creating comprehensive structured data that populates multiple database tables
+    including Emisores, Informe_General, and other relevant entities from BVA content.
+    
+  expected_output: >
+    Complete structured data organized by database tables:
+    {
+      "structured_data": {
+        "Categoria_Emisor": [{"categoria_emisor": "category_name"}],
+        "Emisores": [{"nombre_emisor": "company_name", "id_categoria_emisor": 1}],
+        "Informe_General": [{"titulo_informe": "report_title", "fecha_publicacion": "date"}],
+        "Moneda": [{"codigo_moneda": "PYG", "nombre_moneda": "Paraguayan Guarani"}],
+        [... other populated tables ...]
+      },
+      "processing_report": {
+        "total_records": "number of records created",
+        "tables_populated": "number of tables with data", 
+        "documents_processed": "number of PDFs/Excel files processed",
+        "processing_status": "success"
+      }
+    }
+
+vectorize_task:
+  description: >
+    Create vector embeddings from the structured content for testing vector operations.
+    
+    Process the structured data from the processor agent:
+    
+    1. **Chunk Document Content**
+       - Use "Chunk Document Tool" to break down text content into manageable chunks
+       - Process both structured text and any extracted document content
+       - Create chunks optimized for embedding generation (1200 token limit)
+    
+    2. **Prepare Vector Metadata** (if implemented)
+       - Link text chunks to structured data records
+       - Create metadata for vector database relationships
+       - Prepare data for vector database operations
+    
+    Focus on creating high-quality text chunks that can be used for semantic search
+    and content relationship mapping in the vector database testing.
+    
+  expected_output: >
+    Vector-ready data with chunks and metadata:
+    {
+      "chunks": [
+        {
+          "chunk_id": 0,
+          "text": "chunk content text",
+          "char_count": 800,
+          "position": 0
+        }
+      ],
+      "total_chunks": "number of chunks created",
+      "chunking_report": {
+        "status": "success",
+        "original_length": "original text length",
+        "chunks_created": "number of chunks"
+      }
+    }

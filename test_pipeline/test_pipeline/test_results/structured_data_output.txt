@@ -1,0 +1,25 @@
+```json
+{
+  "structured_data": {
+    "Categoria_Emisor": [{"id_categoria_emisor": 1, "categoria_emisor": "Sociedades Anónimas"}],
+    "Emisores": [],
+    "Moneda": [{"id_moneda": 1, "codigo_moneda": "PYG", "nombre_moneda": "Paraguayan Guarani"}],
+    "Frecuencia": [{"id_frecuencia": 1, "nombre_frecuencia": "Daily"}],
+    "Tipo_Informe": [{"id_tipo_informe": 1, "nombre_tipo_informe": "Market Report"}],
+    "Periodo_Informe": [{"id_periodo": 1, "nombre_periodo": "2024"}],
+    "Unidad_Medida": [{"id_unidad_medida": 1, "simbolo": "%", "nombre_unidad": "Percentage"}],
+    "Instrumento": [],
+    "Informe_General": [],
+    "Resumen_Informe_Financiero": [],
+    "Dato_Macroeconomico": [],
+    "Movimiento_Diario_Bolsa": [],
+    "Licitacion_Contrato": []
+  },
+  "processing_report": {
+    "total_records": 6,
+    "tables_populated": 12,
+    "documents_processed": 0,
+    "processing_status": "success"
+  }
+}
+```

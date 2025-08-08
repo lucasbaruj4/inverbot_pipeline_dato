@@ -32,7 +32,7 @@ if os.path.exists(".env.local"):
 elif os.path.exists(".env"):
     load_dotenv(".env")
 
-from inverbot_pipeline_dato.data import data_source
+# from inverbot_pipeline_dato.data import data_source  # Removed - unused import
 
 # DISABLED: Native CrewAI Firecrawl tools due to version incompatibility
 # # from crewai_tools import FirecrawlScrapeWebsiteTool, FirecrawlCrawlWebsiteTool  # DISABLED - Version incompatibility
@@ -519,8 +519,9 @@ class InverbotPipelineDato():
     agents: List[BaseAgent]
     tasks: List[Task]
 
-    model_llm = os.environ['MODEL']
-    model_embedder = os.environ['EMBEDDER']
+    # Model configuration will be set in __init__ with safe defaults
+    model_llm = None
+    model_embedder = None
     agents_config = 'config/agents.yaml'
     tasks_config = 'config/tasks.yaml'
     test_mode = True # Modo de prueba para extractos chicos
@@ -528,6 +529,11 @@ class InverbotPipelineDato():
     # Performance tracking variables
     def __init__(self):
         super().__init__()
+        
+        # Set model configuration with Gemini-1.5-flash for stability
+        self.model_llm = os.getenv('MODEL', 'gemini/gemini-1.5-flash')
+        self.model_embedder = os.getenv('EMBEDDER', 'models/embedding-001')
+        
         self.performance_metrics = {
             "pipeline_start_time": None,
             "pipeline_end_time": None,
@@ -1077,10 +1083,10 @@ class InverbotPipelineDato():
             # Use native CrewAI crawl tool - simplified call
             result = firecrawl_crawl_native(url, "", {}, test_mode)
             
-            return str(result) if result else f"No content crawled from INE Social: {url}"
+            return str(result) if result else f"No content crawled from DNIT Financial: {url}"
             
         except Exception as e:
-            return f"Error crawling INE Social: {str(e)}"
+            return f"Error crawling DNIT Financial: {str(e)}"
 
     # ============================================================================================
     # SCRAPER TOOLS - PUBLIC CONTRACTS
@@ -1168,10 +1174,10 @@ class InverbotPipelineDato():
             # Use native CrewAI crawl tool - simplified call
             result = firecrawl_crawl_native(url, "", {}, test_mode)
             
-            return str(result) if result else f"No content crawled from INE Social: {url}"
+            return str(result) if result else f"No content crawled from Public Contracts: {url}"
             
         except Exception as e:
-            return f"Error crawling INE Social: {str(e)}"
+            return f"Error crawling Public Contracts: {str(e)}"
 
     # 9. Datos de Inversión
     @tool("DNIT Investment Data Scraper")
@@ -1458,6 +1464,11 @@ class InverbotPipelineDato():
             
             # Analyze content type based on URL and content patterns
             source_url = metadata.get("url", "")
+            if not source_url and links:
+                source_url = links[0]  # Use first link as fallback if metadata.url missing
+            elif not source_url:
+                source_url = "unknown"  # Will use generic processing
+            
             content_type = crew_instance._identify_content_type(source_url, page_content)
             
             # Route processing based on content type
@@ -2674,15 +2685,30 @@ class InverbotPipelineDato():
             return {"error": f"Error structuring extracted data: {str(e)}", "relationship_data": relationship_data}
 
     @tool("Filter Duplicate Data Tool")
-    def filter_duplicate_data(structured_data:dict) -> dict:
+    def filter_duplicate_data(structured_data: dict) -> dict:
         """Filter out data that already exists in Supabase
 
         Args:
-            structured_data: Dicionary with structured data by table
+            structured_data: Dictionary with structured data by table
 
         Returns:
             Dictionary with filtered data and report
         """
+        # Create crew instance to access test_mode
+        crew_instance = InverbotPipelineDato()
+        
+        # In test mode, skip Supabase checks and return data as-is
+        if crew_instance.test_mode:
+            return {
+                "new_data": structured_data,
+                "existing_data": {},
+                "report": {
+                    "total_records": sum(len(records) for records in structured_data.values()),
+                    "new_records": sum(len(records) for records in structured_data.values()),
+                    "existing_records": 0,
+                    "tables_processed": [{"table": table, "total": len(records), "new": len(records), "existing": 0} for table, records in structured_data.items()]
+                }
+            }
         supabase_url = os.getenv("SUPABASE_URL")
         supabase_key = os.getenv("SUPABASE_KEY")
         
@@ -3400,13 +3426,14 @@ class InverbotPipelineDato():
             
             
             # Initialize Pinecone (nueva sintaxis)
-            pinecone.init(api_key=pinecone_api_key)
+            from pinecone import Pinecone
+            pc = Pinecone(api_key=pinecone_api_key)
             
             # Verificar si el índice existe
-            if index_name not in [idx.name for idx in pinecone.list_indexes()]:
+            if index_name not in [idx.name for idx in pc.list_indexes()]:
                 return {"error": f"Index '{index_name}' does not exist in Pinecone"}
             
-            index = pinecone.Index(index_name)
+            index = pc.Index(index_name)
             
             filtered_data = {
                 "new_vectors": [],
@@ -3785,10 +3812,11 @@ class InverbotPipelineDato():
             if env_vars["PINECONE_API_KEY"]:
                 try:
                     import pinecone
-                    pinecone.init(api_key=env_vars["PINECONE_API_KEY"])
+                    from pinecone import Pinecone
+                    pc = Pinecone(api_key=env_vars["PINECONE_API_KEY"])
                     
                     # List indexes
-                    indexes = [idx.name for idx in pinecone.list_indexes()]
+                    indexes = [idx.name for idx in pc.list_indexes()]
                     required_indexes = ["documentos-informes-vector", "dato-macroeconomico-vector", "licitacion-contrato-vector"]
                     
                     missing_indexes = [idx for idx in required_indexes if idx not in indexes]
@@ -3796,7 +3824,7 @@ class InverbotPipelineDato():
                     if test_mode:
                         # Safe read-only test
                         if indexes and indexes[0]:
-                            test_index = pinecone.Index(indexes[0])
+                            test_index = pc.Index(indexes[0])
                             stats = test_index.describe_index_stats()
                             validation_report["database_connectivity"]["pinecone"] = {
                                 "status": "SUCCESS Connected",
@@ -3813,7 +3841,7 @@ class InverbotPipelineDato():
                     else:
                         # Production test with vector operations
                         if "documentos-informes-vector" in indexes:
-                            test_index = pinecone.Index("documentos-informes-vector")
+                            test_index = pc.Index("documentos-informes-vector")
                             # Test upsert and delete
                             test_vector = {
                                 "id": "validation_test_vector",
@@ -3923,7 +3951,7 @@ class InverbotPipelineDato():
 
 
     @tool("Pinecone Vector Loading Tool")
-    def load_vectors_to_pinecone(index_name: str, vector_data: list, test_mode: bool = None) -> str:
+    def load_vectors_to_pinecone(index_name: str, vector_data: list, test_mode: bool = True) -> str:
         """Generate embeddings and load vector data into Pinecone with duplicate detection.
         
         Args:
@@ -3939,9 +3967,10 @@ class InverbotPipelineDato():
         import time
         from datetime import datetime
         
-        # Use class test_mode if not specified
+        # Create crew instance to access test_mode if not specified
         if test_mode is None:
-            test_mode = self.test_mode
+            crew_instance = InverbotPipelineDato()
+            test_mode = crew_instance.test_mode
             
         if not vector_data:
             return json.dumps({"error": "No vector data provided to load"})
@@ -4028,14 +4057,15 @@ class InverbotPipelineDato():
             import pinecone
             import google.generativeai as genai
             
-            pinecone.init(api_key=pinecone_api_key)
+            from pinecone import Pinecone
+            pc = Pinecone(api_key=pinecone_api_key)
             genai.configure(api_key=gemini_api_key)
             
             # Check if index exists
-            if index_name not in [idx.name for idx in pinecone.list_indexes()]:
+            if index_name not in [idx.name for idx in pc.list_indexes()]:
                 return json.dumps({"error": f"Index '{index_name}' does not exist in Pinecone"})
             
-            index = pinecone.Index(index_name)
+            index = pc.Index(index_name)
             
             loading_report = {
                 "index": index_name,
@@ -4256,9 +4286,10 @@ class InverbotPipelineDato():
         if pinecone_api_key:
             try:
                 import pinecone
-                pinecone.init(api_key=pinecone_api_key)
+                from pinecone import Pinecone
+                pc = Pinecone(api_key=pinecone_api_key)
                 
-                available_indexes = [idx.name for idx in pinecone.list_indexes()]
+                available_indexes = [idx.name for idx in pc.list_indexes()]
                 status_report["pinecone_status"]["available_indexes"] = available_indexes
                 
                 # Si no se especifican índices, usar los del esquema
@@ -4272,7 +4303,7 @@ class InverbotPipelineDato():
                 for index_name in indexes_to_check:
                     try:
                         if index_name in available_indexes:
-                            index = pinecone.Index(index_name)
+                            index = pc.Index(index_name)
                             stats = index.describe_index_stats()
                             
                             vector_count = stats.get("total_vector_count", 0)
@@ -4305,12 +4336,12 @@ class InverbotPipelineDato():
 
 
     @tool("Batch Data Validation Tool")
-    def validate_data_before_loading(table_name: str, data: list, index_name: str = None, vector_data: list = None) -> dict:
+    def validate_data_before_loading(table_name: str = None, data: list = None, index_name: str = None, vector_data: list = None) -> dict:
         """Validate data structure before loading to databases.
         
         Args:
-            table_name: Supabase table name for structured data
-            data: Structured data to validate
+            table_name: Supabase table name for structured data (optional)
+            data: Structured data to validate (optional)
             index_name: Pinecone index name (optional)
             vector_data: Vector data to validate (optional)
             
@@ -4323,8 +4354,8 @@ class InverbotPipelineDato():
             "recommendations": []
         }
         
-        # Validar datos de Supabase
-        if data:
+        # Validar datos de Supabase (only if data provided)
+        if data and table_name:
             try:
                 # Verificar que sea una lista
                 if not isinstance(data, list):
@@ -4415,14 +4446,14 @@ class InverbotPipelineDato():
             verbose=True,
             llm=self.model_llm,
             tools=[
+                self.extract_text_from_pdf,
+                self.extract_text_from_excel,
                 self.extract_structured_data_from_raw,
                 self.normalize_data,
                 self.validate_data,
                 self.create_entity_relationships,
                 self.structure_extracted_data,
                 self.filter_duplicate_data,
-                self.extract_text_from_pdf,
-                self.extract_text_from_excel,
             ]
         )
         
