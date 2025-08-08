@@ -80,12 +80,13 @@ process_task:
     
     Sequential Tool Workflow:
     
-    1. **extract_text_from_pdf** & **extract_text_from_excel** - Document Content Extraction [FIRST - PROCESS ALL]
-       - IMPORTANT: First read raw_extraction_output.txt to get all PDF and Excel URLs
-       - Process ALL PDFs found in the documents arrays of all sources
-       - Process ALL Excel files found in the documents arrays of all sources
-       - Call extract_text_from_pdf for EACH PDF URL found (may be multiple calls)
-       - Call extract_text_from_excel for EACH Excel URL found (may be multiple calls)
+    1. **extract_text_from_pdf** & **extract_text_from_excel** - Document Content Extraction [LIMITED MODE]
+       - IMPORTANT: Document limits are active - Max 3 PDFs and 2 Excel files
+       - First read raw_extraction_output.txt to get PDF and Excel URLs
+       - Process PDFs until limit is reached (max 3)
+       - Process Excel files until limit is reached (max 2)
+       - Tools will automatically skip documents once limits are reached
+       - Skipped documents will be processed later via direct_processor.py
        - Output: Extracted document text content for structured processing
     
     2. **extract_structured_data_from_raw** - Intelligent Content Structuring

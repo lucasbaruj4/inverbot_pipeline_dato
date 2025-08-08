@@ -859,21 +859,64 @@ def _generate_structured_and_vectors_from_raw() -> typing.Tuple[dict, dict]:
 # MAIN CREW CLASS
 # ================================================================================================
 
-@CrewBase
-class InverbotPipelineDato():
-    """InverbotPipelineDato crew"""
+# Removed duplicate class definition - see the correct one below
+# Global document processing counters and limits
+DOCUMENT_COUNTERS = {
+    'pdf': 0,
+    'excel': 0,
+    'pdf_urls_processed': [],
+    'excel_urls_processed': []
+}
 
-    agents: List[BaseAgent]
-    tasks: List[Task]
+# Limits for test mode - process only a few documents to avoid overwhelming the system
+DOCUMENT_LIMITS = {
+    'pdf': 3,  # Process maximum 3 PDFs
+    'excel': 2,  # Process maximum 2 Excel files
+    'enabled': True  # Set to False to disable limits
+}
 
-    # Model configuration will be set in __init__ with safe defaults
-    model_llm = None
-    model_embedder = None
-    agents_config = 'config/agents.yaml'
-    tasks_config = 'config/tasks.yaml'
-    test_mode = True # Modo de prueba para extractos chicos
+def reset_document_counters():
+    """Reset the document processing counters"""
+    global DOCUMENT_COUNTERS
+    DOCUMENT_COUNTERS = {
+        'pdf': 0,
+        'excel': 0,
+        'pdf_urls_processed': [],
+        'excel_urls_processed': []
+    }
+
+def should_process_document(doc_type: str, url: str) -> bool:
+    """Check if we should process this document based on limits"""
+    if not DOCUMENT_LIMITS['enabled']:
+        return True
     
-    # Performance tracking variables
+    if doc_type == 'pdf':
+        if DOCUMENT_COUNTERS['pdf'] >= DOCUMENT_LIMITS['pdf']:
+            print(f"[Document Limit] Skipping PDF (limit {DOCUMENT_LIMITS['pdf']} reached): {url}")
+            return False
+    elif doc_type == 'excel':
+        if DOCUMENT_COUNTERS['excel'] >= DOCUMENT_LIMITS['excel']:
+            print(f"[Document Limit] Skipping Excel (limit {DOCUMENT_LIMITS['excel']} reached): {url}")
+            return False
+    
+    return True
+
+def increment_document_counter(doc_type: str, url: str):
+    """Increment the counter after processing a document"""
+    global DOCUMENT_COUNTERS
+    if doc_type == 'pdf':
+        DOCUMENT_COUNTERS['pdf'] += 1
+        DOCUMENT_COUNTERS['pdf_urls_processed'].append(url)
+        print(f"[Document Counter] Processed PDF {DOCUMENT_COUNTERS['pdf']}/{DOCUMENT_LIMITS['pdf']}: {url}")
+    elif doc_type == 'excel':
+        DOCUMENT_COUNTERS['excel'] += 1
+        DOCUMENT_COUNTERS['excel_urls_processed'].append(url)
+        print(f"[Document Counter] Processed Excel {DOCUMENT_COUNTERS['excel']}/{DOCUMENT_LIMITS['excel']}: {url}")
+
+
+class InverbotPipelineDato(CrewBase):
+    """InverbotPipelineDato crew for ETL pipeline with vector processing"""
+    
     def __init__(self):
         super().__init__()
         
@@ -3241,8 +3284,21 @@ class InverbotPipelineDato():
             pdf_url: URL or file path to the PDF document
             
         Returns:
-            Dictionary with extracted text and metadata
+            dict: Extraction results with text content, metadata, and processing report
         """
+        # Check document processing limits
+        if not should_process_document('pdf', pdf_url):
+            return {
+                "status": "skipped",
+                "reason": f"Document limit reached ({DOCUMENT_LIMITS['pdf']} PDFs max)",
+                "url": pdf_url,
+                "metadata": {
+                    "skipped": True,
+                    "limit_reached": True,
+                    "processed_count": DOCUMENT_COUNTERS['pdf']
+                }
+            }
+        
         try:
             import requests
             import io
@@ -3351,6 +3407,9 @@ class InverbotPipelineDato():
                 except:
                     pass  # Metadata extraction is optional
                 
+                # Increment counter after successful extraction
+                increment_document_counter('pdf', pdf_url)
+                
                 return extraction_result
                 
             except Exception as extraction_error:
@@ -3369,6 +3428,19 @@ class InverbotPipelineDato():
         Returns:
             dict: Extraction results with text content, metadata, and processing report
         """
+        # Check document processing limits
+        if not should_process_document('excel', excel_url):
+            return {
+                "status": "skipped",
+                "reason": f"Document limit reached ({DOCUMENT_LIMITS['excel']} Excel files max)",
+                "url": excel_url,
+                "metadata": {
+                    "skipped": True,
+                    "limit_reached": True,
+                    "processed_count": DOCUMENT_COUNTERS['excel']
+                }
+            }
+        
         try:
             import openpyxl
             import requests
@@ -3485,6 +3557,9 @@ class InverbotPipelineDato():
             extraction_result["report"]["total_characters"] = len(full_text)
             extraction_result["report"]["processing_time"] = time.time() - start_time
             extraction_result["report"]["success"] = len(full_text) > 0
+            
+            # Increment counter after successful extraction
+            increment_document_counter('excel', excel_url)
             
             return extraction_result
             
