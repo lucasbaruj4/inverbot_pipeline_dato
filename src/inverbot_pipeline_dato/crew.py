@@ -3166,6 +3166,71 @@ class InverbotPipelineDato():
             return filtered_data
         except Exception as e:
             return {"error": f"Error filtering duplicate data : {str(e)}", "structured_data": structured_data}
+
+    @tool("Write Structured Data to File")
+    def write_structured_data_to_file(structured_data: dict) -> dict:
+        """Write structured data to file for persistence and downstream processing.
+        
+        This tool takes the processed structured data and writes it to the output file,
+        enabling the pipeline to handle large datasets that exceed LLM response limits.
+        
+        Args:
+            structured_data: Dictionary containing structured data from filter_duplicate_data tool
+            
+        Returns:
+            Dictionary with write status and file path
+        """
+        try:
+            import json
+            import os
+            from datetime import datetime
+            
+            # Define output path
+            output_dir = os.path.join("output", "try_1")
+            output_path = os.path.join(output_dir, "structured_data_output.txt")
+            
+            # Ensure output directory exists
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Add timestamp to the data
+            if "metadata" not in structured_data:
+                structured_data["metadata"] = {}
+            structured_data["metadata"]["generated_at"] = datetime.now().isoformat()
+            
+            # Count total records across all tables
+            total_records = 0
+            tables_with_data = []
+            
+            if "structured_data" in structured_data:
+                for table_name, records in structured_data["structured_data"].items():
+                    if records and len(records) > 0:
+                        total_records += len(records)
+                        tables_with_data.append(table_name)
+            
+            # Atomic write to avoid corruption
+            tmp_path = output_path + ".tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(structured_data, f, ensure_ascii=False, indent=2, default=str)
+            
+            # Replace existing file
+            os.replace(tmp_path, output_path)
+            
+            # Return success status
+            return {
+                "status": "success",
+                "file_path": output_path,
+                "total_records_written": total_records,
+                "tables_written": tables_with_data,
+                "file_size_kb": os.path.getsize(output_path) / 1024,
+                "message": f"Successfully wrote {total_records} records across {len(tables_with_data)} tables to {output_path}"
+            }
+            
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e),
+                "message": f"Failed to write structured data to file: {str(e)}"
+            }
         
     
     @tool("Extract Text from PDF Tool")
@@ -3891,6 +3956,86 @@ class InverbotPipelineDato():
             
         except Exception as e:
             return {"error": f"Error filtering duplicate vectors: {str(e)}", "vector_data": vector_data}
+
+    @tool("Write Vector Data to File")
+    def write_vector_data_to_file(vector_data: dict) -> dict:
+        """Write vector data to file for persistence and downstream processing.
+        
+        This tool takes the prepared vector data and writes it to the output file,
+        enabling the pipeline to handle large vector datasets that exceed LLM response limits.
+        
+        Args:
+            vector_data: Dictionary containing vector data from filter_duplicate_vectors tool
+            
+        Returns:
+            Dictionary with write status and file path
+        """
+        try:
+            import json
+            import os
+            from datetime import datetime
+            
+            # Define output path
+            output_dir = os.path.join("output", "try_1")
+            output_path = os.path.join(output_dir, "vector_data_output.txt")
+            
+            # Ensure output directory exists
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Add timestamp to the data
+            if "metadata" not in vector_data:
+                vector_data["metadata"] = {}
+            vector_data["metadata"]["generated_at"] = datetime.now().isoformat()
+            
+            # Count total vectors across all indices
+            total_vectors = 0
+            indices_with_data = []
+            
+            if "vector_data" in vector_data:
+                for index_name, vectors in vector_data["vector_data"].items():
+                    if vectors and len(vectors) > 0:
+                        total_vectors += len(vectors)
+                        indices_with_data.append(index_name)
+            elif "filtered_vectors" in vector_data:
+                # Handle output from filter_duplicate_vectors
+                for index_name, vectors in vector_data["filtered_vectors"].items():
+                    if vectors and len(vectors) > 0:
+                        total_vectors += len(vectors)
+                        indices_with_data.append(index_name)
+                # Restructure for consistency
+                vector_data["vector_data"] = vector_data.pop("filtered_vectors")
+            
+            # Add summary if not present
+            if "vectorization_summary" not in vector_data:
+                vector_data["vectorization_summary"] = {}
+            
+            vector_data["vectorization_summary"]["total_vectors"] = total_vectors
+            vector_data["vectorization_summary"]["indices_populated"] = indices_with_data
+            
+            # Atomic write to avoid corruption
+            tmp_path = output_path + ".tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(vector_data, f, ensure_ascii=False, indent=2, default=str)
+            
+            # Replace existing file
+            os.replace(tmp_path, output_path)
+            
+            # Return success status
+            return {
+                "status": "success",
+                "file_path": output_path,
+                "total_vectors_written": total_vectors,
+                "indices_written": indices_with_data,
+                "file_size_kb": os.path.getsize(output_path) / 1024,
+                "message": f"Successfully wrote {total_vectors} vectors across {len(indices_with_data)} indices to {output_path}"
+            }
+            
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e),
+                "message": f"Failed to write vector data to file: {str(e)}"
+            }
     
     
     @tool("Supabase Data Loading Tool")
@@ -4952,6 +5097,7 @@ class InverbotPipelineDato():
                 self.create_entity_relationships,
                 self.structure_extracted_data,
                 self.filter_duplicate_data,
+                self.write_structured_data_to_file,
             ]
         )
         
@@ -4966,7 +5112,8 @@ class InverbotPipelineDato():
                 self.extract_text_from_excel,
                 self.chunk_document,
                 self.prepare_document_metadata,
-                self.filter_duplicate_vectors
+                self.filter_duplicate_vectors,
+                self.write_vector_data_to_file
             ]
         )
 

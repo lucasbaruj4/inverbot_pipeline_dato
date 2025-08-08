@@ -10,22 +10,26 @@ extract_task:
     - Extract metadata about page structure and navigation elements
     - Let the Processor Agent handle intelligent data structuring
     
-    Tool Usage Sequence:
-    1. **BVA Sources** (4 tools):
+    Tool Usage Requirements - MUST USE ALL 10 TOOLS:
+    You MUST call ALL 10 scraper tools. Do NOT stop after using just a few. Call them in this order:
+    
+    1. **BVA Sources** (4 tools) - MUST USE ALL:
        - scrape_bva_emisores: Raw content from company listings and entity pages
        - scrape_bva_daily: Raw content from daily market reports and data
        - scrape_bva_monthly: Raw content from monthly summaries and volumes
        - scrape_bva_annual: Raw content from annual report pages
     
-    2. **Government Data** (3 tools):
+    2. **Government Data** (3 tools) - MUST USE ALL:
        - scrape_datos_gov: Raw content from open government data portal
        - scrape_ine_main: Raw content from national statistics institute
        - scrape_ine_social: Raw content from social statistics publications
     
-    3. **Contracts & Investment** (3 tools):
+    3. **Contracts & Investment** (3 tools) - MUST USE ALL:
        - scrape_contrataciones: Raw content from public procurement portal
        - scrape_dnit_investment: Raw content from investment information pages
        - scrape_dnit_financial: Raw content from financial regulatory reports
+    
+    IMPORTANT: You must call ALL 10 tools, even if some fail or return empty data. Do not stop early!
     
     Content Capture Strategy:
     - Begin with test_mode=True for validation (limited credit usage)
@@ -43,6 +47,7 @@ extract_task:
     
     Output provides raw content for Processor Agent to intelligently structure into database format.
   expected_output: >
+    IMPORTANT: You MUST populate ALL 10 content fields below by calling ALL 10 scraper tools.
     Raw content structure organized by data source with comprehensive content capture:
     {
       "bva_sources": {
@@ -75,10 +80,12 @@ process_task:
     
     Sequential Tool Workflow:
     
-    1. **extract_text_from_pdf** & **extract_text_from_excel** - Document Content Extraction [FIRST]
-       - Input: PDF and Excel URLs from raw content links and documents arrays
-       - Extract full text content from financial documents, reports, and spreadsheets
-       - Process documents found during raw extraction phase
+    1. **extract_text_from_pdf** & **extract_text_from_excel** - Document Content Extraction [FIRST - PROCESS ALL]
+       - IMPORTANT: First read raw_extraction_output.txt to get all PDF and Excel URLs
+       - Process ALL PDFs found in the documents arrays of all sources
+       - Process ALL Excel files found in the documents arrays of all sources
+       - Call extract_text_from_pdf for EACH PDF URL found (may be multiple calls)
+       - Call extract_text_from_excel for EACH Excel URL found (may be multiple calls)
        - Output: Extracted document text content for structured processing
     
     2. **extract_structured_data_from_raw** - Intelligent Content Structuring
@@ -128,6 +135,13 @@ process_task:
        - Filter out existing records, keep only new data
        - Output: Final deduplicated data ready for loading
     
+    8. **write_structured_data_to_file** - File Persistence [CRITICAL - MUST BE LAST]
+       - Input: Final structured data from step 7
+       - Write complete structured data to output/try_1/structured_data_output.txt
+       - Handles large datasets that exceed LLM response limits
+       - Ensures data persistence for downstream agents
+       - Output: Success status with file path and statistics
+    
     Quality Checkpoints:
     - Validate data integrity at each stage
     - Report processing statistics and error counts
@@ -138,30 +152,31 @@ process_task:
     Tipo_Informe, Periodo_Informe, Unidad_Medida, Instrumento, Informe_General, 
     Resumen_Informe_Financiero, Dato_Macroeconomico, Movimiento_Diario_Bolsa, Licitacion_Contrato.
   expected_output: >
-    Production-ready structured data organized by table with loading metadata:
+    File write confirmation with processing summary. The structured data has been written to output/try_1/structured_data_output.txt.
+    Processing Summary:
     {
-      "structured_data": {
-        "Categoria_Emisor": [{"categoria_emisor": str}],
-        "Emisores": [{"nombre_emisor": str, "id_categoria_emisor": int, "calificacion_bva": str}],
-        "Informe_General": [{"titulo_informe": str, "id_emisor": int, "fecha_publicacion": date}],
-        "Resumen_Informe_Financiero": [{"id_informe": int, "activos_totales": decimal, "patrimonio_neto": decimal}],
-        "Dato_Macroeconomico": [{"indicador_nombre": str, "fecha_dato": date, "valor_numerico": decimal}],
-        "Movimiento_Diario_Bolsa": [{"fecha_operacion": date, "id_instrumento": int, "precio_operacion": decimal}],
-        "Licitacion_Contrato": [{"titulo": str, "entidad_convocante": str, "monto_adjudicado": decimal}]
+      "file_write_status": {
+        "status": "success",
+        "file_path": "output/try_1/structured_data_output.txt",
+        "total_records_written": int,
+        "tables_written": [str],
+        "file_size_kb": float
       },
-      "loading_metadata": {
-        "total_records": int,
+      "processing_summary": {
         "tables_populated": [str],
-        "loading_priority": [str],
-        "batch_sizes": {"table_name": int},
+        "total_records_processed": int,
+        "documents_extracted": int,
         "relationships_created": int,
-        "duplicates_filtered": int
-      },
-      "processing_report": {
-        "normalization_errors": [str],
-        "validation_errors": [str],
-        "relationship_warnings": [str],
+        "duplicates_filtered": int,
+        "validation_errors": int,
         "data_quality_score": float
+      },
+      "key_statistics": {
+        "emisores_created": int,
+        "informes_processed": int,
+        "macroeconomic_data_points": int,
+        "contracts_identified": int,
+        "daily_movements": int
       }
     }
 
@@ -203,6 +218,13 @@ vectorize_task:
        - Report deduplication statistics
        - Output: Final deduplicated vector data ready for embedding
     
+    4. **write_vector_data_to_file** - File Persistence [CRITICAL - MUST BE LAST]
+       - Input: Final vector data from step 3
+       - Write complete vector data to output/try_1/vector_data_output.txt
+       - Handles large vector datasets that exceed LLM response limits
+       - Ensures data persistence for downstream loading agent
+       - Output: Success status with file path and statistics
+    
     Index-Specific Processing:
     - **documentos-informes-vector**: Complete document content with structured data references
     - **dato-macroeconomico-vector**: Economic context with metric relationships  
@@ -221,58 +243,36 @@ vectorize_task:
     - Generate embeddings compatible with Gemini (768 dimensions)
     - Link vectors to corresponding Supabase structured data
   expected_output: >
-    Vector data organized by Pinecone index with comprehensive metadata:
+    File write confirmation with vectorization summary. The vector data has been written to output/try_1/vector_data_output.txt.
+    Vectorization Summary:
     {
-      "vector_data": {
-        "documentos-informes-vector": [
-          {
-            "id": "uuid",
-            "text": "chunk_content",
-            "metadata": {
-              "id_informe": int,
-              "id_emisor": int,
-              "id_tipo_informe": int,
-              "fecha_publicacion": "date",
-              "chunk_id": int,
-              "source_document": "filename",
-              "content_type": "financial_report"
-            }
-          }
-        ],
-        "dato-macroeconomico-vector": [
-          {
-            "id": "uuid",
-            "text": "economic_context",
-            "metadata": {
-              "id_dato_macro": int,
-              "indicador_nombre": "str",
-              "fecha_dato": "date",
-              "id_emisor": int,
-              "chunk_id": int,
-              "metric_value": float
-            }
-          }
-        ],
-        "licitacion-contrato-vector": [
-          {
-            "id": "uuid", 
-            "text": "contract_details",
-            "metadata": {
-              "id_licitacion_contrato": int,
-              "titulo": "str",
-              "entidad_convocante": "str",
-              "monto_adjudicado": float,
-              "fecha_adjudicacion": "date"
-            }
-          }
-        ]
+      "file_write_status": {
+        "status": "success",
+        "file_path": "output/try_1/vector_data_output.txt",
+        "total_vectors_written": int,
+        "indices_written": [str],
+        "file_size_kb": float
       },
-      "vectorization_summary": {
-        "total_vectors": int,
-        "chunks_created": int,
+      "vectorization_statistics": {
+        "total_chunks_created": int,
         "pdf_documents_processed": int,
+        "excel_documents_processed": int,
         "duplicates_filtered": int,
         "indices_populated": [str]
+      },
+      "index_breakdown": {
+        "documentos-informes-vector": {
+          "vectors_created": int,
+          "average_chunk_size": int
+        },
+        "dato-macroeconomico-vector": {
+          "vectors_created": int,
+          "economic_indicators": int
+        },
+        "licitacion-contrato-vector": {
+          "vectors_created": int,
+          "contracts_processed": int
+        }
       }
     }
   context: [process_task, extract_task]
