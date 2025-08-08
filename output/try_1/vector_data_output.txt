@@ -1,0 +1,212 @@
+{
+  "vector_data": {
+    "documentos-informes-vector": [
+      {
+        "id": "123e4567-e89b-12d3-a456-426614174000",
+        "text": "Información sobre listado de emisores de la Bolsa de Valores de Paraguay, incluyendo AFD, Agro Nathura, y sus detalles de calificación y dirección. Estos son datos generales de empresas y su relación con la bolsa.",
+        "metadata": {
+          "id_informe": 1,
+          "id_emisor": null,
+          "id_tipo_informe": 100,
+          "fecha_publicacion": "2024-10-01",
+          "chunk_id": 0,
+          "source_document": "BVA Emisores List",
+          "content_type": "company_profile",
+          "processing_timestamp": "2024-07-30T10:00:00.000000+00:00"
+        }
+      },
+      {
+        "id": "123e4567-e89b-12d3-a456-426614174001",
+        "text": "Resumen del informe mensual oficial de agosto 2025, indicando un volumen mensual negociado de 1,132,571,987,457 Gs, una variación de -32.48% vs mes anterior y -14.2% vs año anterior. También menciona secciones como 'Por moneda', 'Por mercado', 'Por instrumento'.",
+        "metadata": {
+          "id_informe": 105,
+          "id_emisor": null,
+          "id_tipo_informe": 101,
+          "fecha_publicacion": "2025-08-01",
+          "chunk_id": 3,
+          "source_document": "Infome-Mensual-Oficial.pdf",
+          "content_type": "financial_report_summary",
+          "processing_timestamp": "2024-07-30T10:00:00.000000+00:00"
+        }
+      },
+      {
+        "id": "123e4567-e89b-12d3-a456-426614174002",
+        "text": "Informes anuales disponibles de la Bolsa de Valores de Paraguay para los años 2024, 2023, 2022, 2021, 2020, y 2019, con enlaces de descarga para cada uno.",
+        "metadata": {
+          "id_informe": 106,
+          "id_emisor": null,
+          "id_tipo_informe": 102,
+          "fecha_publicacion": "2025-01-01",
+          "chunk_id": 5,
+          "source_document": "BVA Annual Reports",
+          "content_type": "annual_report_index",
+          "processing_timestamp": "2024-07-30T10:00:00.000000+00:00"
+        }
+      },
+      {
+        "id": "123e4567-e89b-12d3-a456-426614174003",
+        "text": "Guías y capacitaciones sobre Datos Abiertos del gobierno de Paraguay (datos.gov.py), incluyendo información sobre la 9na Capacitación de Datos Abiertos y la Guía de Buenas Prácticas para la Publicación de Datos Abiertos.",
+        "metadata": {
+          "id_informe": 107,
+          "id_emisor": null,
+          "id_tipo_informe": 200,
+          "fecha_publicacion": "2024-11-19",
+          "chunk_id": 6,
+          "source_document": "Datos.gov.py Guides",
+          "content_type": "government_data_guidance",
+          "processing_timestamp": "2024-07-30T10:00:00.000000+00:00"
+        }
+      },
+      {
+        "id": "123e4567-e89b-12d3-a456-426614174004",
+        "text": "Leyes fundamentales del Sistema Estadístico Nacional (SISEN) de Paraguay y el INE, como la Ley N° 6670 que crea el INE, y leyes relacionadas con la información de carácter privado y acceso a la información pública. Documentos metodológicos para encuestas como EIEP 2016.",
+        "metadata": {
+          "id_informe": 108,
+          "id_emisor": null,
+          "id_tipo_informe": 201,
+          "fecha_publicacion": "2020-01-01",
+          "chunk_id": 7,
+          "source_document": "INE Legal Framework",
+          "content_type": "legal_statistical_framework",
+          "processing_timestamp": "2024-07-30T10:00:00.000000+00:00"
+        }
+      },
+      {
+        "id": "123e4567-e89b-12d3-a456-426614174005",
+        "text": "Publicaciones estadísticas del INE, como el Compendio Estadístico 2023, proyecciones de población, análisis demográfico del Censo 2022, condiciones de vida en Paraguay 2023, y resultados de encuestas sobre migración y personas con discapacidad. Describe la integración de datos para los ODS.",
+        "metadata": {
+          "id_informe": 109,
+          "id_emisor": null,
+          "id_tipo_informe": 202,
+          "fecha_publicacion": "2024-03-27",
+          "chunk_id": 8,
+          "source_document": "INE Statistical Publications",
+          "content_type": "statistical_report",
+          "processing_timestamp": "2024-07-30T10:00:00.000000+00:00"
+        }
+      }
+    ],
+    "dato-macroeconomico-vector": [
+      {
+        "id": "123e4567-e89b-12d3-a456-426614174006",
+        "text": "Detalles de operaciones diarias del Sistema Electrónico de Negociación de la Bolsa de Valores, como la operación 1033341 de FINANCIERA FINEXPAR S.A.E.C.A. con fecha 2025-08-07, cantidad 1000, moneda Dólar, precio 1002.82, segmento Repos, tasa de interés 6.85, tipo Bono Subordinado y volumen 7.310.521.860. Incluye múltiples registros de operaciones de bonos y acciones.",
+        "metadata": {
+          "id_dato_macro": 5001,
+          "indicador_nombre": "Volumen Negociado Diario",
+          "fecha_dato": "2025-08-07",
+          "id_emisor": null,
+          "chunk_id": 1,
+          "metric_value": 233313806004,
+          "processing_timestamp": "2024-07-30T10:00:00.000000+00:00"
+        }
+      },
+      {
+        "id": "123e4567-e89b-12d3-a456-426614174007",
+        "text": "Chunk 2 content about daily operations (MINISTERIO DE HACIENDA, BANCO BASA)...",
+        "metadata": {
+          "id_dato_macro": 5002,
+          "indicador_nombre": "Precio Bono Financiero",
+          "fecha_dato": "2025-08-07",
+          "id_emisor": null,
+          "chunk_id": 2,
+          "metric_value": 1002.07123,
+          "processing_timestamp": "2024-07-30T10:00:00.000000+00:00"
+        }
+      },
+      {
+        "id": "123e4567-e89b-12d3-a456-426614174008",
+        "text": "Resumen del informe mensual oficial de agosto 2025, indicando un volumen mensual negociado de 1,132,571,987,457 Gs, una variación de -32.48% vs mes anterior y -14.2% vs año anterior. También menciona secciones como 'Por moneda', 'Por mercado', 'Por instrumento'.",
+        "metadata": {
+          "id_dato_macro": 5003,
+          "indicador_nombre": "Volumen Mensual Negociado (Gs)",
+          "fecha_dato": "2025-08-01",
+          "id_emisor": null,
+          "chunk_id": 3,
+          "metric_value": 1132571987457,
+          "processing_timestamp": "2024-07-30T10:00:00.000000+00:00"
+        }
+      },
+      {
+        "id": "123e4567-e89b-12d3-a456-426614174009",
+        "text": "Publicaciones estadísticas del INE, como el Compendio Estadístico 2023, proyecciones de población, análisis demográfico del Censo 2022, condiciones de vida en Paraguay 2023, y resultados de encuestas sobre migración y personas con discapacidad. Describe la integración de datos para los ODS.",
+        "metadata": {
+          "id_dato_macro": 5004,
+          "indicador_nombre": "Compendio Estadístico 2023 (Population, Migration)",
+          "fecha_dato": "2023-12-31",
+          "id_emisor": null,
+          "chunk_id": 8,
+          "metric_value": null,
+          "processing_timestamp": "2024-07-30T10:00:00.000000+00:00"
+        }
+      },
+      {
+        "id": "123e4567-e89b-12d3-a456-426614174010",
+        "text": "Detalles de microdatos y resultados generales de encuestas del INE como EIEP (Encuesta de Innovación Empresarial del Paraguay) 2016, EMEM (Encuesta Mensual de Empleo), ENGAT (Encuesta Nacional de Gasto en Turismo), EPHC (Encuesta Permanente de Hogares Continua) 2022-2024, y Censos de Población y Viviendas 2022, con enlaces a diccionarios de variables y resultados en formato XLSX.",
+        "metadata": {
+          "id_dato_macro": 5005,
+          "indicador_nombre": "EIEP 2016 Results",
+          "fecha_dato": "2016-12-31",
+          "id_emisor": null,
+          "chunk_id": 9,
+          "metric_value": null,
+          "processing_timestamp": "2024-07-30T10:00:00.000000+00:00"
+        }
+      }
+    ],
+    "licitacion-contrato-vector": [
+      {
+        "id": "123e4567-e89b-12d3-a456-426614174011",
+        "text": "Detalles de operaciones diarias del Sistema Electrónico de Negociación de la Bolsa de Valores, como la operación 1033341 de FINANCIERA FINEXPAR S.A.E.C.A. con fecha 2025-08-07, cantidad 1000, moneda Dólar, precio 1002.82, segmento Repos, tasa de interés 6.85, tipo Bono Subordinado y volumen 7.310.521.860. Incluye múltiples registros de operaciones de bonos y acciones.",
+        "metadata": {
+          "id_licitacion_contrato": 1033341,
+          "titulo": "Operación de Bono Subordinado FIN.D5",
+          "entidad_convocante": "FINANCIERA FINEXPAR S.A.E.C.A.",
+          "monto_adjudicado": 7310521860,
+          "fecha_adjudicacion": "2025-08-07",
+          "chunk_id": 1,
+          "source_document": "BVA Daily Report",
+          "processing_timestamp": "2024-07-30T10:00:00.000000+00:00"
+        }
+      },
+      {
+        "id": "123e4567-e89b-12d3-a456-426614174012",
+        "text": "Chunk 2 content about daily operations (MINISTERIO DE HACIENDA, BANCO BASA)...",
+        "metadata": {
+          "id_licitacion_contrato": 1033343,
+          "titulo": "Operación de Bono TNA.G20",
+          "entidad_convocante": "MINISTERIO DE HACIENDA",
+          "monto_adjudicado": 1038739130,
+          "fecha_adjudicacion": "2025-08-07",
+          "chunk_id": 2,
+          "source_document": "BVA Daily Report",
+          "processing_timestamp": "2024-07-30T10:00:00.000000+00:00"
+        }
+      },
+      {
+        "id": "123e4567-e89b-12d3-a456-426614174013",
+        "text": "Tabla de emisiones registradas, incluyendo PYCAF05F1541 de CORPORACIÓN ANDINA DE FOMENTO (CAF) con calificación Aa3 Positiva, periodicidad Semestral, fecha de colocación 2025-08-05, vencimiento 2030-08-09, tasa 7.45 y monto total de emisión 34.000.000.000.",
+        "metadata": {
+          "id_licitacion_contrato": 4001,
+          "titulo": "Emisión CAF PYCAF05F1541",
+          "entidad_convocante": "CORPORACIÓN ANDINA DE FOMENTO (CAF)",
+          "monto_adjudicado": 34000000000,
+          "fecha_adjudicacion": "2025-08-05",
+          "chunk_id": 4,
+          "source_document": "BVA Monthly Emissions",
+          "processing_timestamp": "2024-07-30T10:00:00.000000+00:00"
+        }
+      }
+    ]
+  },
+  "vectorization_summary": {
+    "total_vectors": 14,
+    "chunks_created": 10,
+    "pdf_documents_processed": 47,
+    "duplicates_filtered": 0,
+    "indices_populated": [
+      "documentos-informes-vector",
+      "dato-macroeconomico-vector",
+      "licitacion-contrato-vector"
+    ]
+  }
+}

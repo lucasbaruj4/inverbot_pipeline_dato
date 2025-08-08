@@ -4421,6 +4421,8 @@ class InverbotPipelineDato():
                 self.create_entity_relationships,
                 self.structure_extracted_data,
                 self.filter_duplicate_data,
+                self.extract_text_from_pdf,
+                self.extract_text_from_excel,
             ]
         )
         

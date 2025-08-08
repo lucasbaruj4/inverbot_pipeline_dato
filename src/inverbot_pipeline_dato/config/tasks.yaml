@@ -75,48 +75,54 @@ process_task:
     
     Sequential Tool Workflow:
     
-    1. **extract_structured_data_from_raw** - Intelligent Content Structuring [NEW]
-       - Input: Raw content from extractor (page_content, links, documents, metadata)
+    1. **extract_text_from_pdf** & **extract_text_from_excel** - Document Content Extraction [FIRST]
+       - Input: PDF and Excel URLs from raw content links and documents arrays
+       - Extract full text content from financial documents, reports, and spreadsheets
+       - Process documents found during raw extraction phase
+       - Output: Extracted document text content for structured processing
+    
+    2. **extract_structured_data_from_raw** - Intelligent Content Structuring
+       - Input: Raw content from extractor + extracted document text from step 1
        - Analyze content type based on source URL and content patterns
        - Intelligently extract structured data from unstructured text
        - Route processing based on source (BVA, INE, DNIT, contracts, etc.)
        - Convert raw content into preliminary database record format
        - Output: Structured data organized by 14 database tables
     
-    2. **normalize_data** - Data Cleaning & Standardization
-       - Input: Structured data from step 1
+    3. **normalize_data** - Data Cleaning & Standardization
+       - Input: Structured data from step 2
        - Clean HTML artifacts, special characters, encoding issues
        - Standardize date formats (YYYY-MM-DD), number formats (decimal)
        - Convert string numbers to proper numeric types
        - Handle missing values and data type inconsistencies
        - Output: Clean, normalized data dictionary
     
-    3. **validate_data** - Schema Validation
-       - Input: Normalized data from step 2
+    4. **validate_data** - Schema Validation
+       - Input: Normalized data from step 3
        - Validate against all 14 Supabase table schemas
        - Check data types, field lengths, required constraints
        - Validate foreign key references and relationships
        - Separate valid data from invalid entries with error reporting
        - Output: Validated data + validation error report
     
-    4. **create_entity_relationships** - Relationship Building
-       - Input: Validated data from step 3
+    5. **create_entity_relationships** - Relationship Building
+       - Input: Validated data from step 4
        - Resolve entity names to proper IDs (emisor names → id_emisor)
        - Create master entities first (Categoria_Emisor, Moneda, etc.)
        - Establish foreign key relationships across all tables
        - Handle missing references with appropriate defaults
        - Output: Data with complete entity relationships
     
-    5. **structure_extracted_data** - Final Organization
-       - Input: Data with relationships from step 4
+    6. **structure_extracted_data** - Final Organization
+       - Input: Data with relationships from step 5
        - Organize data by target Supabase tables
        - Apply loading priorities (master tables first)
        - Create optimized batches for bulk loading
        - Add loading metadata and recommendations
        - Output: Production-ready structured data
     
-    6. **filter_duplicate_data** - Duplicate Prevention
-       - Input: Structured data from step 5
+    7. **filter_duplicate_data** - Duplicate Prevention
+       - Input: Structured data from step 6
        - Check existing Supabase data to prevent duplicates
        - Use table-specific unique field combinations
        - Filter out existing records, keep only new data
@@ -169,16 +175,8 @@ vectorize_task:
     
     Sequential Tool Workflow:
     
-    1. **extract_text_from_pdf** - PDF Document Processing
-       - Input: PDF URLs from 'raw_extraction_output.txt' (pdf_documents array)
-       - Extract full text content from financial reports, studies, legal documents
-       - Use PyMuPDF for robust text extraction with metadata preservation
-       - Handle multi-page documents, tables, and structured content
-       - Extract document metadata: title, author, creation date, page count
-       - Output: Text content + document metadata for each PDF
-    
-    2. **chunk_document** - Intelligent Text Chunking
-       - Input: Extracted text content from step 1 + structured text from processor
+    1. **chunk_document** - Intelligent Text Chunking
+       - Input: Extracted document text and structured data from 'structured_data_output.txt'
        - Chunk size: 1200 tokens (optimized for Gemini embeddings)
        - Overlap: 200 tokens to preserve semantic continuity
        - Use tiktoken for accurate token counting with fallback to character-based chunking
@@ -186,8 +184,8 @@ vectorize_task:
        - Maintain context across chunks with proper overlap management
        - Output: List of text chunks with position metadata
     
-    3. **prepare_document_metadata** - Multi-Index Metadata Preparation
-       - Input: Chunks from step 2 + structured data relationships
+    2. **prepare_document_metadata** - Multi-Index Metadata Preparation
+       - Input: Chunks from step 1 + structured data relationships
        - Prepare metadata for 3 Pinecone indices:
          * documentos-informes-vector: Full document embeddings
          * dato-macroeconomico-vector: Economic indicator context
@@ -197,8 +195,8 @@ vectorize_task:
        - Include processing timestamps and content classification
        - Output: Vector-ready data with index-specific metadata
     
-    4. **filter_duplicate_vectors** - Vector Deduplication
-       - Input: Prepared vector data from step 3
+    3. **filter_duplicate_vectors** - Vector Deduplication
+       - Input: Prepared vector data from step 2
        - Check existing Pinecone indices for duplicate content
        - Use unique field combinations per index for deduplication
        - Filter out existing vectors, keep only new content
@@ -211,8 +209,8 @@ vectorize_task:
     - **licitacion-contrato-vector**: Contract details with entity associations
     
     Content Sources:
-    - PDF documents from BVA, INE, DNIT financial reports
-    - Structured text content from Informe_General records
+    - Extracted document text from processor agent output (structured_data_output.txt)
+    - Structured data records from all 14 Supabase tables
     - Economic indicator descriptions and context
     - Contract and tender detailed information
     
