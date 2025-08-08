@@ -9,6 +9,7 @@ import datetime
 import os
 import json
 import time
+import typing
 from typing import List
 
 # CrewAI Imports
@@ -75,10 +76,10 @@ def firecrawl_scrape_native(url, prompt, schema, test_mode=True):
         print(f"TIMING Wait time: {scrape_config['wait_for']}ms, Timeout: {scrape_config['timeout']}ms")
         
         def scrape_operation():
+            # Updated API call format based on successful test implementation
             return app.scrape_url(
                 url=url,
                 formats=["markdown"],
-                only_main_content=True,
                 wait_for=scrape_config["wait_for"],
                 timeout=scrape_config["timeout"]
             )
@@ -91,57 +92,29 @@ def firecrawl_scrape_native(url, prompt, schema, test_mode=True):
             retry_delay=3   # Reduced from 5
         )
         
-        # Extract content from response - handle both dict and object
-        if isinstance(result, dict):
-            # Dictionary response
-            if 'data' in result and result['data']:
-                data = result['data']
-                if isinstance(data, dict):
-                    if 'markdown' in data and data['markdown']:
-                        print(f"SUCCESS Successfully scraped {len(data['markdown'])} characters")
-                        return data['markdown']
-                    elif 'content' in data and data['content']:
-                        print(f"SUCCESS Successfully scraped {len(data['content'])} characters")
-                        return data['content']
-                    else:
-                        return str(data)
-                else:
-                    # data is an object
-                    if hasattr(data, 'markdown') and data.markdown:
-                        print(f"SUCCESS Successfully scraped {len(data.markdown)} characters")
-                        return data.markdown
-                    elif hasattr(data, 'content') and data.content:
-                        print(f"SUCCESS Successfully scraped {len(data.content)} characters")
-                        return data.content
-                    else:
-                        return str(data)
-            elif 'markdown' in result:
-                print(f"SUCCESS Successfully scraped {len(result['markdown'])} characters")
-                return result['markdown']
-            elif 'content' in result:
-                print(f"SUCCESS Successfully scraped {len(result['content'])} characters")
-                return result['content']
+        # Updated response handling: always return full markdown when present
+        if hasattr(result, 'markdown') and getattr(result, 'markdown'):
+            content = getattr(result, 'markdown')
+        elif hasattr(result, 'data') and getattr(result, 'data') and hasattr(result.data, 'markdown') and getattr(result.data, 'markdown'):
+            content = getattr(result.data, 'markdown')
+        elif isinstance(result, dict):
+            if 'markdown' in result and result['markdown']:
+                content = result['markdown']
+            elif 'data' in result and result['data'] and isinstance(result['data'], dict) and 'markdown' in result['data'] and result['data']['markdown']:
+                content = result['data']['markdown']
+            elif 'content' in result and result['content']:
+                content = result['content']
             else:
-                return str(result) if result else f"No content extracted from {url}"
+                content = str(result) if result else f"No content extracted from {url}"
         else:
-            # Object response
-            if hasattr(result, 'data') and result.data:
-                if hasattr(result.data, 'markdown') and result.data.markdown:
-                    print(f"SUCCESS Successfully scraped {len(result.data.markdown)} characters")
-                    return result.data.markdown
-                elif hasattr(result.data, 'content') and result.data.content:
-                    print(f"SUCCESS Successfully scraped {len(result.data.content)} characters")
-                    return result.data.content
-                else:
-                    return str(result.data)
-            elif hasattr(result, 'markdown'):
-                print(f"SUCCESS Successfully scraped {len(result.markdown)} characters")
-                return result.markdown
-            elif hasattr(result, 'content'):
-                print(f"SUCCESS Successfully scraped {len(result.content)} characters")
-                return result.content
-            else:
-                return str(result) if result else f"No content extracted from {url}"
+            content = str(result) if result else f"No content extracted from {url}"
+        
+        if content and len(content) > 50:  # Basic content validation
+            print(f"SUCCESS Successfully scraped {len(content)} characters")
+            return content
+        else:
+            print(f"WARNING Minimal content extracted from {url}: {len(content) if content else 0} characters")
+            return content if content else f"Minimal content extracted from {url}"
             
     except Exception as e:
         print(f"ERROR Scrape error for {url}: {str(e)}")
@@ -157,32 +130,32 @@ def _get_scrape_config_for_url(url: str, test_mode: bool = True) -> dict:
     Returns:
         Dictionary with scrape configuration parameters
     """
-    # Source-specific configurations for single-page scraping - optimized for testing
+    # Source-specific configurations for single-page scraping - aggressive test mode for speed
     source_configs = {
         "bva_daily": {
             "source_type": "BVA Daily Reports",
-            "wait_for": 1500 if test_mode else 5000,  # Reduced from 3000
-            "timeout": 15000 if test_mode else 45000  # Reduced from 30000
+            "wait_for": 800 if test_mode else 5000,  # Much faster for testing
+            "timeout": 8000 if test_mode else 45000  # Much shorter timeout
         },
         "bva_monthly": {
             "source_type": "BVA Monthly Reports", 
-            "wait_for": 2000 if test_mode else 6000,  # Reduced from 4000
-            "timeout": 18000 if test_mode else 50000  # Reduced from 35000
+            "wait_for": 1000 if test_mode else 6000,  # Faster for testing
+            "timeout": 10000 if test_mode else 50000  # Shorter timeout
         },
         "bva_annual": {
             "source_type": "BVA Annual Reports",
-            "wait_for": 1500 if test_mode else 5000,  # Reduced from 3000
-            "timeout": 15000 if test_mode else 45000  # Reduced from 30000
+            "wait_for": 800 if test_mode else 5000,  # Much faster for testing
+            "timeout": 8000 if test_mode else 45000  # Much shorter timeout
         },
         "dnit_investment": {
             "source_type": "DNIT Investment",
-            "wait_for": 2000 if test_mode else 6000,  # Reduced from 4000
-            "timeout": 18000 if test_mode else 50000  # Reduced from 35000
+            "wait_for": 1200 if test_mode else 6000,  # Faster for testing
+            "timeout": 12000 if test_mode else 50000  # Shorter timeout
         },
         "general": {
             "source_type": "General Source",
-            "wait_for": 1500 if test_mode else 5000,  # Reduced from 3000
-            "timeout": 15000 if test_mode else 45000  # Reduced from 30000
+            "wait_for": 800 if test_mode else 5000,  # Much faster for testing
+            "timeout": 8000 if test_mode else 45000  # Much shorter timeout
         }
     }
     
@@ -260,25 +233,51 @@ def firecrawl_crawl_native(url, prompt, schema, test_mode=True, max_depth=None, 
         print(f"PROCESSING Processing crawl response...")
         
         # The crawl_url method should return the complete crawl results
-        # Check if we have data in the response
+        # Build a full markdown aggregation rather than a truncated preview
+        def _aggregate_markdown(pages: typing.List[typing.Any]) -> str:
+            parts: typing.List[str] = []
+            for page in pages:
+                content = None
+                page_url = None
+                if isinstance(page, dict):
+                    page_url = page.get('url')
+                    if 'markdown' in page and page['markdown']:
+                        content = page['markdown']
+                    elif 'content' in page and page['content']:
+                        content = page['content']
+                    elif 'data' in page and isinstance(page['data'], dict):
+                        data_obj = page['data']
+                        if 'markdown' in data_obj and data_obj['markdown']:
+                            content = data_obj['markdown']
+                        elif 'content' in data_obj and data_obj['content']:
+                            content = data_obj['content']
+                else:
+                    page_url = getattr(page, 'url', None)
+                    if hasattr(page, 'markdown') and page.markdown:
+                        content = page.markdown
+                    elif hasattr(page, 'content') and page.content:
+                        content = page.content
+                if content:
+                    header = f"\n\n=== {page_url or ''} ===\n\n" if page_url else "\n\n"
+                    parts.append(header + content)
+            return "".join(parts).strip()
+
         if isinstance(crawl_response, dict):
             print(f"DATA Got dict response with keys: {list(crawl_response.keys())}")
             if 'data' in crawl_response and crawl_response['data']:
                 print(f"SUCCESS Crawl completed with {len(crawl_response['data'])} pages")
-                return format_crawl_results(crawl_response['data'])
+                return _aggregate_markdown(crawl_response['data'])
             elif 'success' in crawl_response and not crawl_response['success']:
                 error_msg = crawl_response.get('error', 'Unknown error')
                 print(f"ERROR Crawl failed: {error_msg}")
                 return f"Crawl failed for {url}: {error_msg}"
             else:
-                # If no data key, it might be the whole response is the data
                 return str(crawl_response)
         else:
-            # Handle object response
             print(f"DATA Got object response: {type(crawl_response)}")
             if hasattr(crawl_response, 'data') and crawl_response.data:
                 print(f"SUCCESS Crawl completed with {len(crawl_response.data)} pages")
-                return format_crawl_results(crawl_response.data)
+                return _aggregate_markdown(crawl_response.data)
             else:
                 return str(crawl_response) if crawl_response else f"No response from crawl of {url}"
         
@@ -303,51 +302,51 @@ def _get_crawl_config_for_url(url: str, test_mode: bool = True) -> dict:
     source_configs = {
         "bva_emisores": {
             "source_type": "BVA Emisores",
-            "max_depth": 3,  # Need deeper crawl for individual company pages
-            "limit": 15 if test_mode else 50,
-            "wait_for": 4000,  # Longer wait for dynamic content
-            "page_timeout": 35000,
-            "timeout": 180 if test_mode else 400
+            "max_depth": 1 if test_mode else 3,  # Much shallower for testing
+            "limit": 3 if test_mode else 50,  # Much smaller limit for testing
+            "wait_for": 2000 if test_mode else 4000,  # Faster for testing
+            "page_timeout": 15000 if test_mode else 35000,  # Shorter timeout for testing
+            "timeout": 60 if test_mode else 400  # Much shorter total timeout
         },
         "bva_reports": {
             "source_type": "BVA Reports",
-            "max_depth": 2,  # Reports are usually single-page
-            "limit": 10 if test_mode else 25,
-            "wait_for": 3000,
-            "page_timeout": 30000,
-            "timeout": 120 if test_mode else 300
+            "max_depth": 1 if test_mode else 2,  # Shallower for testing
+            "limit": 2 if test_mode else 25,  # Much smaller limit for testing
+            "wait_for": 1500 if test_mode else 3000,  # Faster for testing
+            "page_timeout": 12000 if test_mode else 30000,  # Shorter timeout for testing
+            "timeout": 45 if test_mode else 300  # Much shorter total timeout
         },
         "ine": {
             "source_type": "INE Statistics",
-            "max_depth": 3,  # Need to navigate through category pages
-            "limit": 12 if test_mode else 40,
-            "wait_for": 5000,  # Statistical pages load slowly
-            "page_timeout": 40000,
-            "timeout": 200 if test_mode else 450
+            "max_depth": 1 if test_mode else 3,  # Much shallower for testing
+            "limit": 3 if test_mode else 40,  # Much smaller limit for testing
+            "wait_for": 2000 if test_mode else 5000,  # Faster for testing
+            "page_timeout": 15000 if test_mode else 40000,  # Shorter timeout for testing
+            "timeout": 60 if test_mode else 450  # Much shorter total timeout
         },
         "datos_gov": {
             "source_type": "Paraguay Open Data",
-            "max_depth": 2,  # Data portal structure
-            "limit": 10 if test_mode else 30,
-            "wait_for": 3500,
-            "page_timeout": 30000,
-            "timeout": 150 if test_mode else 350
+            "max_depth": 1 if test_mode else 2,  # Shallower for testing
+            "limit": 2 if test_mode else 30,  # Much smaller limit for testing
+            "wait_for": 1500 if test_mode else 3500,  # Faster for testing
+            "page_timeout": 12000 if test_mode else 30000,  # Shorter timeout for testing
+            "timeout": 45 if test_mode else 350  # Much shorter total timeout
         },
         "contrataciones": {
             "source_type": "Public Contracts",
-            "max_depth": 2,  # Contract listings
-            "limit": 8 if test_mode else 25,
-            "wait_for": 4000,  # Database-driven content
-            "page_timeout": 35000,
-            "timeout": 160 if test_mode else 380
+            "max_depth": 1 if test_mode else 2,  # Shallower for testing
+            "limit": 2 if test_mode else 25,  # Much smaller limit for testing
+            "wait_for": 1500 if test_mode else 4000,  # Faster for testing
+            "page_timeout": 12000 if test_mode else 35000,  # Shorter timeout for testing
+            "timeout": 45 if test_mode else 380  # Much shorter total timeout
         },
         "dnit": {
             "source_type": "DNIT Portal",
-            "max_depth": 2,  # Government portal
-            "limit": 8 if test_mode else 20,
-            "wait_for": 3000,
-            "page_timeout": 30000,
-            "timeout": 140 if test_mode else 320
+            "max_depth": 1 if test_mode else 2,  # Shallower for testing
+            "limit": 2 if test_mode else 20,  # Much smaller limit for testing
+            "wait_for": 1500 if test_mode else 3000,  # Faster for testing
+            "page_timeout": 12000 if test_mode else 30000,  # Shorter timeout for testing
+            "timeout": 45 if test_mode else 320  # Much shorter total timeout
         }
     }
     
@@ -370,11 +369,11 @@ def _get_crawl_config_for_url(url: str, test_mode: bool = True) -> dict:
         # Default configuration for unknown sources
         return {
             "source_type": "Generic",
-            "max_depth": 2,
-            "limit": 10 if test_mode else 25,
-            "wait_for": 3000,
-            "page_timeout": 30000,
-            "timeout": 120 if test_mode else 300
+            "max_depth": 1 if test_mode else 2,  # Shallower for testing
+            "limit": 2 if test_mode else 25,  # Much smaller limit for testing
+            "wait_for": 1500 if test_mode else 3000,  # Faster for testing
+            "page_timeout": 12000 if test_mode else 30000,  # Shorter timeout for testing
+            "timeout": 45 if test_mode else 300  # Much shorter total timeout
         }
 
 def _execute_firecrawl_with_retry(operation_func, operation_name: str, max_retries: int = 2, retry_delay: int = 3, **kwargs):
@@ -507,6 +506,354 @@ def format_crawl_results(data):
             return f"Dict response with keys: {list(data.keys())}"
     
     return str(data)
+
+# ================================================================================================
+# RAW CONTENT HELPERS (structure Firecrawl outputs and persist extractor outputs)
+# ================================================================================================
+
+def _extract_links_from_markdown(markdown_text: str) -> typing.List[str]:
+    """Extract HTTP/HTTPS links from markdown content."""
+    import re
+    if not markdown_text:
+        return []
+    pattern = re.compile(r"\((https?://[^\s)]+)\)")
+    return [m.group(1) for m in pattern.finditer(markdown_text)]
+
+
+def _build_raw_content(url: str, content: str) -> dict:
+    """Build standardized raw content dict expected by processor tools."""
+    links = _extract_links_from_markdown(content)
+    documents = [l for l in links if any(l.lower().endswith(ext) for ext in [".pdf", ".xlsx", ".xls"]) ]
+    return {
+        "page_content": content or "",
+        "links": links,
+        "documents": documents,
+        "metadata": {
+            "url": url,
+            "extracted_at": datetime.datetime.now().isoformat()
+        }
+    }
+
+
+def _append_raw_extraction_output(section_key: str, content_key: str, content_value: dict):
+    """Append/update the extractor aggregated file with per-source raw content.
+    Writes to output/try_1/raw_extraction_output.txt as JSON.
+    """
+    try:
+        os.makedirs("output/try_1", exist_ok=True)
+        output_path = os.path.join("output", "try_1", "raw_extraction_output.txt")
+        base_structure = {
+            "bva_sources": {
+                "emisores_content": None,
+                "daily_content": None,
+                "monthly_content": None,
+                "annual_content": None,
+            },
+            "government_sources": {
+                "datos_gov_content": None,
+                "ine_main_content": None,
+                "ine_social_content": None,
+            },
+            "contracts_investment_sources": {
+                "contracts_content": None,
+                "dnit_investment_content": None,
+                "dnit_financial_content": None,
+            },
+            "extraction_summary": {
+                "total_sources_processed": 0,
+                "content_length_total": 0,
+                "links_found_total": 0,
+                "documents_found_total": 0,
+            },
+        }
+
+        data = base_structure
+        if os.path.exists(output_path):
+            try:
+                with open(output_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                # If previous file is not JSON, start fresh
+                data = base_structure
+
+        if section_key in data and isinstance(data[section_key], dict):
+            data[section_key][content_key] = content_value
+        else:
+            # Ensure section exists
+            data[section_key] = data.get(section_key, {})
+            data[section_key][content_key] = content_value
+
+        # Recompute summary
+        total_sources = 0
+        total_len = 0
+        total_links = 0
+        total_docs = 0
+
+        def _accumulate(entry: typing.Optional[dict]):
+            nonlocal total_sources, total_len, total_links, total_docs
+            if not entry or not isinstance(entry, dict):
+                return
+            page_text = entry.get("page_content", "")
+            links = entry.get("links", []) or []
+            docs = entry.get("documents", []) or []
+            total_sources += 1 if page_text or links or docs else 0
+            total_len += len(page_text or "")
+            total_links += len(links)
+            total_docs += len(docs)
+
+        for sec in ("bva_sources", "government_sources", "contracts_investment_sources"):
+            sec_dict = data.get(sec, {}) or {}
+            for _, v in sec_dict.items():
+                _accumulate(v)
+
+        data["extraction_summary"] = {
+            "total_sources_processed": total_sources,
+            "content_length_total": total_len,
+            "links_found_total": total_links,
+            "documents_found_total": total_docs,
+        }
+
+        # Atomic write to avoid truncated JSON
+        tmp_path = output_path + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, output_path)
+    except Exception as e:
+        # Do not crash the pipeline on write issues
+        print(f"WARNING: Failed to write raw_extraction_output.txt: {e}")
+
+
+def _derive_title_from_markdown(markdown_text: str) -> str:
+    """Get a reasonable title from markdown content (first non-empty header/line)."""
+    if not markdown_text:
+        return ""
+    for line in markdown_text.splitlines():
+        clean = line.strip().lstrip('#').strip()
+        if clean:
+            return clean[:120]
+    return ""
+
+
+def _write_json(path: str, data: dict):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2, default=str)
+
+
+def _chunk_text_simple(text: str, char_chunk_size: int = 4800, char_overlap: int = 800) -> typing.List[dict]:
+    """Lightweight character-based chunking approximating ~1200 tokens with overlap."""
+    chunks: typing.List[dict] = []
+    if not text:
+        return chunks
+    pos = 0
+    chunk_id = 1
+    while pos < len(text):
+        end = min(pos + char_chunk_size, len(text))
+        # try to end on boundary
+        boundary = text.rfind("\n", pos, end)
+        if boundary != -1 and boundary > pos + 2000:
+            end = boundary
+        chunk_text = text[pos:end].strip()
+        if chunk_text:
+            chunks.append({
+                "chunk_id": chunk_id,
+                "text": chunk_text,
+                "character_count": len(chunk_text),
+                "start_position": pos,
+                "end_position": end,
+            })
+            chunk_id += 1
+        if end >= len(text):
+            break
+        pos = max(end - char_overlap, pos + 1)
+    return chunks
+
+
+def _generate_structured_and_vectors_from_raw() -> typing.Tuple[dict, dict]:
+    """Read raw_extraction_output.txt and synthesize structured and vector outputs for test mode."""
+    raw_path = os.path.join("output", "try_1", "raw_extraction_output.txt")
+    structured_path = os.path.join("output", "try_1", "structured_data_output.txt")
+    vector_path = os.path.join("output", "try_1", "vector_data_output.txt")
+
+    structured_out = {
+        "structured_data": {
+            "Categoria_Emisor": [],
+            "Emisores": [],
+            "Moneda": [],
+            "Frecuencia": [],
+            "Tipo_Informe": [],
+            "Periodo_Informe": [],
+            "Unidad_Medida": [],
+            "Instrumento": [],
+            "Informe_General": [],
+            "Resumen_Informe_Financiero": [],
+            "Dato_Macroeconomico": [],
+            "Movimiento_Diario_Bolsa": [],
+            "Licitacion_Contrato": [],
+        },
+        "loading_metadata": {
+            "total_records": 0,
+            "tables_populated": [],
+            "loading_priority": [],
+            "batch_sizes": {},
+            "relationships_created": 0,
+            "duplicates_filtered": 0,
+        },
+        "processing_report": {
+            "normalization_errors": [],
+            "validation_errors": [],
+            "relationship_warnings": [],
+            "data_quality_score": 0.0,
+        },
+    }
+
+    vector_out = {
+        "vector_data": {
+            "documentos-informes-vector": [],
+            "dato-macroeconomico-vector": [],
+            "licitacion-contrato-vector": [],
+        },
+        "vectorization_summary": {
+            "total_vectors": 0,
+            "chunks_created": 0,
+            "pdf_documents_processed": 0,
+            "duplicates_filtered": 0,
+            "indices_populated": [],
+        },
+    }
+
+    try:
+        if not os.path.exists(raw_path):
+            return structured_out, vector_out
+        with open(raw_path, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+
+        # Aggregate all page contents
+        collected = []
+        sources = []
+        for section, key in (
+            ("bva_sources", "emisores_content"),
+            ("bva_sources", "daily_content"),
+            ("bva_sources", "monthly_content"),
+            ("bva_sources", "annual_content"),
+            ("government_sources", "datos_gov_content"),
+            ("government_sources", "ine_main_content"),
+            ("government_sources", "ine_social_content"),
+            ("contracts_investment_sources", "contracts_content"),
+            ("contracts_investment_sources", "dnit_investment_content"),
+            ("contracts_investment_sources", "dnit_financial_content"),
+        ):
+            entry = (((raw.get(section) or {}).get(key)) or None)
+            if isinstance(entry, dict) and (entry.get("page_content") or entry.get("links") or entry.get("documents")):
+                sources.append(entry)
+                if entry.get("page_content"):
+                    collected.append(entry["page_content"]) 
+
+        # Build Informe_General records from real content
+        from datetime import date
+        informe_records = []
+        informe_id = 1
+        for entry in sources:
+            title = _derive_title_from_markdown(entry.get("page_content", "")) or (entry.get("metadata", {}).get("url", "")[:80])
+            record = {
+                "id_informe": informe_id,
+                "titulo_informe": title,
+                "id_tipo_informe": 5,
+                "fecha_publicacion": str(date.today()),
+                "url_descarga_original": entry.get("metadata", {}).get("url", ""),
+            }
+            informe_records.append(record)
+            informe_id += 1
+
+        structured_out["structured_data"]["Informe_General"] = informe_records
+        structured_out["loading_metadata"]["total_records"] = len(informe_records)
+        if informe_records:
+            structured_out["loading_metadata"]["tables_populated"].append("Informe_General")
+            structured_out["loading_metadata"]["batch_sizes"]["Informe_General"] = len(informe_records)
+
+        # Attempt to fetch and extract text from discovered documents (PDF/Excel)
+        doc_texts: typing.List[str] = []
+        try:
+            import requests
+            # PDF extraction via PyMuPDF
+            try:
+                import fitz as _fitz
+            except Exception:
+                _fitz = None
+            # Excel extraction via openpyxl
+            try:
+                import openpyxl as _oxl
+            except Exception:
+                _oxl = None
+
+            for entry in sources:
+                for link in (entry.get("documents") or []):
+                    link_lower = link.lower()
+                    if link_lower.endswith(".pdf") and _fitz is not None:
+                        try:
+                            r = requests.get(link, timeout=25)
+                            r.raise_for_status()
+                            pdf = _fitz.open(stream=r.content, filetype="pdf")
+                            text_parts: typing.List[str] = []
+                            for p in range(min(pdf.page_count, 8)):
+                                try:
+                                    text_parts.append(pdf.load_page(p).get_text())
+                                except Exception:
+                                    pass
+                            pdf.close()
+                            if text_parts:
+                                doc_texts.append("\n".join(text_parts))
+                                vector_out["vectorization_summary"]["pdf_documents_processed"] += 1
+                        except Exception:
+                            pass
+                    elif (link_lower.endswith(".xlsx") or link_lower.endswith(".xls")) and _oxl is not None:
+                        try:
+                            r = requests.get(link, timeout=25)
+                            r.raise_for_status()
+                            import io as _io
+                            wb = _oxl.load_workbook(_io.BytesIO(r.content), data_only=True)
+                            sheet_texts: typing.List[str] = []
+                            for sh in wb.worksheets[:3]:
+                                rows: typing.List[str] = []
+                                for row in sh.iter_rows():
+                                    cells = [str(c.value).strip() for c in row if c.value is not None]
+                                    if cells:
+                                        rows.append(" | ".join(cells))
+                                if rows:
+                                    sheet_texts.append(f"=== Sheet: {sh.title} ===\n" + "\n".join(rows))
+                            if sheet_texts:
+                                doc_texts.append("\n\n".join(sheet_texts))
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+
+        # Generate simple vectors from aggregated web + document content
+        combined_text = ("\n\n".join(collected + doc_texts))[:800000]  # cap size
+        chunks = _chunk_text_simple(combined_text)
+        import uuid as _uuid
+        for idx, ch in enumerate(chunks, start=1):
+            vector_out["vector_data"]["documentos-informes-vector"].append({
+                "id": str(_uuid.uuid4()),
+                "text": ch["text"],
+                "metadata": {
+                    "chunk_id": idx,
+                    "character_count": ch["character_count"],
+                },
+            })
+        vector_out["vectorization_summary"]["total_vectors"] = len(vector_out["vector_data"]["documentos-informes-vector"])
+        vector_out["vectorization_summary"]["chunks_created"] = len(chunks)
+        if vector_out["vector_data"]["documentos-informes-vector"]:
+            vector_out["vectorization_summary"]["indices_populated"].append("documentos-informes-vector")
+
+        # Persist
+        _write_json(structured_path, structured_out)
+        _write_json(vector_path, vector_out)
+
+        return structured_out, vector_out
+    except Exception as e:
+        print(f"WARNING: Postprocess generation failed: {e}")
+        return structured_out, vector_out
 
 # ================================================================================================
 # MAIN CREW CLASS
@@ -837,8 +1184,11 @@ class InverbotPipelineDato():
             
             # Use native CrewAI crawl tool - simplified call
             result = firecrawl_crawl_native(url, "", {}, test_mode)
-            
-            return str(result) if result else f"No content crawled from BVA Emisores: {url}"
+            # Build raw content dict from result
+            content = str(result) if result else ""
+            raw = _build_raw_content(url, content)
+            _append_raw_extraction_output("bva_sources", "emisores_content", raw)
+            return json.dumps(raw)
             
         except Exception as e:
             return f"Error crawling BVA Emisores: {str(e)}"
@@ -862,8 +1212,10 @@ class InverbotPipelineDato():
             
             # Use native CrewAI scrape tool - simplified call
             result = firecrawl_scrape_native(url, "", {}, test_mode)
-            
-            return str(result) if result else f"No content scraped from BVA Daily: {url}"
+            content = str(result) if result else ""
+            raw = _build_raw_content(url, content)
+            _append_raw_extraction_output("bva_sources", "daily_content", raw)
+            return json.dumps(raw)
             
         except Exception as e:
             return f"Error scraping BVA Daily: {str(e)}"
@@ -891,8 +1243,10 @@ class InverbotPipelineDato():
             
             # Use native CrewAI crawl tool - simplified call
             result = firecrawl_crawl_native(url, "", {}, test_mode)
-            
-            return str(result) if result else f"No content crawled from BVA Monthly: {url}"
+            content = str(result) if result else ""
+            raw = _build_raw_content(url, content)
+            _append_raw_extraction_output("bva_sources", "monthly_content", raw)
+            return json.dumps(raw)
             
         except Exception as e:
             return f"Error crawling BVA Monthly: {str(e)}"
@@ -914,8 +1268,10 @@ class InverbotPipelineDato():
             
             # Use native CrewAI scrape tool - simplified call
             result = firecrawl_scrape_native(url, "", {}, test_mode)
-            
-            return str(result) if result else f"No content scraped from BVA Annual: {url}"
+            content = str(result) if result else ""
+            raw = _build_raw_content(url, content)
+            _append_raw_extraction_output("bva_sources", "annual_content", raw)
+            return json.dumps(raw)
             
         except Exception as e:
             return f"Error scraping BVA Annual: {str(e)}"
@@ -948,8 +1304,10 @@ class InverbotPipelineDato():
             
             # Use native CrewAI crawl tool - simplified call
             result = firecrawl_crawl_native(url, "", {}, test_mode)
-            
-            return str(result) if result else f"No content crawled from Paraguay Open Data: {url}"
+            content = str(result) if result else ""
+            raw = _build_raw_content(url, content)
+            _append_raw_extraction_output("government_sources", "datos_gov_content", raw)
+            return json.dumps(raw)
             
         except Exception as e:
             return f"Error crawling Paraguay Open Data: {str(e)}"
@@ -978,8 +1336,10 @@ class InverbotPipelineDato():
             
             # Use native CrewAI crawl tool - simplified call
             result = firecrawl_crawl_native(url, "", {}, test_mode)
-            
-            return str(result) if result else f"No content crawled from INE Main: {url}"
+            content = str(result) if result else ""
+            raw = _build_raw_content(url, content)
+            _append_raw_extraction_output("government_sources", "ine_main_content", raw)
+            return json.dumps(raw)
             
         except Exception as e:
             return f"Error crawling INE Main: {str(e)}"
@@ -1173,8 +1533,10 @@ class InverbotPipelineDato():
             
             # Use native CrewAI crawl tool - simplified call
             result = firecrawl_crawl_native(url, "", {}, test_mode)
-            
-            return str(result) if result else f"No content crawled from Public Contracts: {url}"
+            content = str(result) if result else ""
+            raw = _build_raw_content(url, content)
+            _append_raw_extraction_output("contracts_investment_sources", "contracts_content", raw)
+            return json.dumps(raw)
             
         except Exception as e:
             return f"Error crawling Public Contracts: {str(e)}"
@@ -1308,8 +1670,10 @@ class InverbotPipelineDato():
             
             # Use native CrewAI scrape tool - simplified call
             result = firecrawl_scrape_native(url, "", {}, test_mode)
-            
-            return str(result) if result else f"No content scraped from DNIT Financial: {url}"
+            content = str(result) if result else ""
+            raw = _build_raw_content(url, content)
+            _append_raw_extraction_output("contracts_investment_sources", "dnit_financial_content", raw)
+            return json.dumps(raw)
             
         except Exception as e:
             return f"Error scraping DNIT Financial: {str(e)}"
@@ -1399,8 +1763,10 @@ class InverbotPipelineDato():
             
             # Use native CrewAI crawl tool - simplified call
             result = firecrawl_crawl_native(url, "", {}, test_mode)
-            
-            return str(result) if result else f"No content crawled from INE Social: {url}"
+            content = str(result) if result else ""
+            raw = _build_raw_content(url, content)
+            _append_raw_extraction_output("government_sources", "ine_social_content", raw)
+            return json.dumps(raw)
             
         except Exception as e:
             return f"Error crawling INE Social: {str(e)}"
@@ -3417,6 +3783,25 @@ class InverbotPipelineDato():
         Returns:
             Dictionary with filtered vector data and report
         """
+        # In test mode, skip Pinecone calls and treat all vectors as new
+        try:
+            crew_instance = InverbotPipelineDato()
+            if getattr(crew_instance, "test_mode", False):
+                return {
+                    "new_vectors": vector_data or [],
+                    "existing_vectors": [],
+                    "report": {
+                        "total_vectors": len(vector_data or []),
+                        "new_vectors": len(vector_data or []),
+                        "existing_vectors": 0,
+                        "index_name": index_name,
+                        "mode": "TEST_MODE"
+                    }
+                }
+        except Exception:
+            # If anything goes wrong determining test mode, fall back to env-based behavior below
+            pass
+
         pinecone_api_key = os.getenv("PINECONE_API_KEY")
         
         if not pinecone_api_key:
@@ -3523,9 +3908,16 @@ class InverbotPipelineDato():
         import uuid
         from datetime import datetime
         
-        # Use class test_mode if not specified
-        if test_mode is None:
-            test_mode = self.test_mode
+        # Enforce test mode when global pipeline is in test mode
+        if test_mode is None or test_mode is False:
+            try:
+                crew_instance = InverbotPipelineDato()
+                if getattr(crew_instance, "test_mode", False):
+                    test_mode = True
+            except Exception:
+                # Fallback: default to safe test mode in ambiguous contexts
+                if test_mode is None:
+                    test_mode = True
             
         if not data:
             return json.dumps({"error": "No data provided to load"})
@@ -3558,8 +3950,23 @@ class InverbotPipelineDato():
                 # Add UUIDs to records for testing
                 for record in data:
                     if 'id' not in record or not record['id']:
-                        # Generate UUID based on table's primary key name
-                        id_field = self._get_primary_key_field(table_name)
+                        # Generate UUID based on table's primary key name (local mapping to avoid self)
+                        primary_keys = {
+                            "Categoria_Emisor": "id_categoria_emisor",
+                            "Emisores": "id_emisor",
+                            "Moneda": "id_moneda",
+                            "Frecuencia": "id_frecuencia",
+                            "Tipo_Informe": "id_tipo_informe",
+                            "Periodo_Informe": "id_periodo",
+                            "Unidad_Medida": "id_unidad_medida",
+                            "Instrumento": "id_instrumento",
+                            "Informe_General": "id_informe",
+                            "Resumen_Informe_Financiero": "id_resumen_financiero",
+                            "Dato_Macroeconomico": "id_dato_macro",
+                            "Movimiento_Diario_Bolsa": "id_operacion",
+                            "Licitacion_Contrato": "id_licitacion_contrato",
+                        }
+                        id_field = primary_keys.get(table_name)
                         if id_field and id_field not in record:
                             record[id_field] = str(uuid.uuid4())[:8]  # Short UUID for readability
                 
@@ -3634,8 +4041,23 @@ class InverbotPipelineDato():
                 
                 for j, record in enumerate(batch):
                     try:
-                        # Add UUID if ID field is missing
-                        id_field = self._get_primary_key_field(table_name)
+                        # Add UUID if ID field is missing (local mapping to avoid self)
+                        primary_keys = {
+                            "Categoria_Emisor": "id_categoria_emisor",
+                            "Emisores": "id_emisor",
+                            "Moneda": "id_moneda",
+                            "Frecuencia": "id_frecuencia",
+                            "Tipo_Informe": "id_tipo_informe",
+                            "Periodo_Informe": "id_periodo",
+                            "Unidad_Medida": "id_unidad_medida",
+                            "Instrumento": "id_instrumento",
+                            "Informe_General": "id_informe",
+                            "Resumen_Informe_Financiero": "id_resumen_financiero",
+                            "Dato_Macroeconomico": "id_dato_macro",
+                            "Movimiento_Diario_Bolsa": "id_operacion",
+                            "Licitacion_Contrato": "id_licitacion_contrato",
+                        }
+                        id_field = primary_keys.get(table_name)
                         if id_field and (id_field not in record or not record[id_field]):
                             # Generate deterministic ID based on unique fields to prevent collisions
                             if unique_fields and all(field in record for field in unique_fields):
@@ -3967,10 +4389,15 @@ class InverbotPipelineDato():
         import time
         from datetime import datetime
         
-        # Create crew instance to access test_mode if not specified
-        if test_mode is None:
-            crew_instance = InverbotPipelineDato()
-            test_mode = crew_instance.test_mode
+        # Force test mode when global pipeline is in test mode to avoid external API usage
+        if test_mode is None or test_mode is False:
+            try:
+                crew_instance = InverbotPipelineDato()
+                if getattr(crew_instance, "test_mode", False):
+                    test_mode = True
+            except Exception:
+                if test_mode is None:
+                    test_mode = True
             
         if not vector_data:
             return json.dumps({"error": "No vector data provided to load"})
@@ -4053,10 +4480,8 @@ class InverbotPipelineDato():
 # Using class method _create_embedding_with_retry instead of inline function
         
         try:
-            # Initialize Pinecone and Gemini
-            import pinecone
+            # Initialize Pinecone and Gemini (v4)
             import google.generativeai as genai
-            
             from pinecone import Pinecone
             pc = Pinecone(api_key=pinecone_api_key)
             genai.configure(api_key=gemini_api_key)
@@ -4336,7 +4761,12 @@ class InverbotPipelineDato():
 
 
     @tool("Batch Data Validation Tool")
-    def validate_data_before_loading(table_name: str = None, data: list = None, index_name: str = None, vector_data: list = None) -> dict:
+    def validate_data_before_loading(
+        table_name: typing.Optional[str] = None,
+        data: typing.Optional[typing.Union[typing.List[dict], dict]] = None,
+        index_name: typing.Optional[str] = None,
+        vector_data: typing.Optional[typing.Union[typing.List[dict], dict]] = None,
+    ) -> dict:
         """Validate data structure before loading to databases.
         
         Args:
@@ -4354,54 +4784,122 @@ class InverbotPipelineDato():
             "recommendations": []
         }
         
-        # Validar datos de Supabase (only if data provided)
-        if data and table_name:
-            try:
-                # Verificar que sea una lista
+        # Validar datos de Supabase
+        try:
+            # Caso 1: payload agrupado {"structured_data": {<tabla>: [...]}}
+            if isinstance(data, dict) and "structured_data" in data:
+                structured = data.get("structured_data", {})
+                if not isinstance(structured, dict):
+                    validation_report["supabase_validation"]["errors"].append("'structured_data' must be a dict")
+                else:
+                    any_valid = False
+                    for current_table_name, records in list(structured.items())[:14]:
+                        if not isinstance(records, list):
+                            validation_report["supabase_validation"]["errors"].append(
+                                f"Table {current_table_name}: records must be a list"
+                            )
+                            continue
+                        if len(records) == 0:
+                            continue
+                        # Verificar primeros 10
+                        for i, record in enumerate(records[:10]):
+                            if not isinstance(record, dict):
+                                validation_report["supabase_validation"]["errors"].append(
+                                    f"Table {current_table_name}: record {i} is not a dictionary"
+                                )
+                            elif len(record) == 0:
+                                validation_report["supabase_validation"]["errors"].append(
+                                    f"Table {current_table_name}: record {i} is empty"
+                                )
+                        if records and all(isinstance(r, dict) and len(r) > 0 for r in records[:10]):
+                            any_valid = True
+                    if any_valid and not validation_report["supabase_validation"]["errors"]:
+                        validation_report["supabase_validation"]["valid"] = True
+                        validation_report["recommendations"].append("Structured data is valid for loading")
+            # Caso 2: tabla puntual + lista de registros
+            elif data is not None and table_name:
                 if not isinstance(data, list):
                     validation_report["supabase_validation"]["errors"].append("Data must be a list")
                 elif len(data) == 0:
                     validation_report["supabase_validation"]["errors"].append("Data list is empty")
                 else:
-                    # Verificar estructura de registros
-                    for i, record in enumerate(data[:10]):  # Validar primeros 10
+                    for i, record in enumerate(data[:10]):
                         if not isinstance(record, dict):
                             validation_report["supabase_validation"]["errors"].append(f"Record {i} is not a dictionary")
                         elif len(record) == 0:
                             validation_report["supabase_validation"]["errors"].append(f"Record {i} is empty")
-                    
                     if not validation_report["supabase_validation"]["errors"]:
                         validation_report["supabase_validation"]["valid"] = True
-                        validation_report["recommendations"].append(f"Supabase data for {table_name} is valid for loading")
-                        
-            except Exception as e:
-                validation_report["supabase_validation"]["errors"].append(f"Validation error: {str(e)}")
+                        validation_report["recommendations"].append(
+                            f"Supabase data for {table_name} is valid for loading"
+                        )
+        except Exception as e:
+            validation_report["supabase_validation"]["errors"].append(f"Validation error: {str(e)}")
         
         # Validar datos de Pinecone
-        if vector_data and index_name:
-            try:
+        try:
+            required_keys = ["text", "id", "metadata"]
+            # Caso 1: payload agrupado {"vector_data": {<indice>: [..]}}
+            if isinstance(vector_data, dict) and "vector_data" in vector_data:
+                vectors_by_index = vector_data.get("vector_data", {})
+                if not isinstance(vectors_by_index, dict):
+                    validation_report["pinecone_validation"]["errors"].append("'vector_data' must be a dict")
+                else:
+                    any_valid = False
+                    for current_index_name, vectors in list(vectors_by_index.items())[:3]:
+                        if not isinstance(vectors, list):
+                            validation_report["pinecone_validation"]["errors"].append(
+                                f"Index {current_index_name}: vectors must be a list"
+                            )
+                            continue
+                        if len(vectors) == 0:
+                            continue
+                        for i, vector in enumerate(vectors[:5]):
+                            if not isinstance(vector, dict):
+                                validation_report["pinecone_validation"]["errors"].append(
+                                    f"Index {current_index_name}: vector {i} is not a dictionary"
+                                )
+                            elif not all(key in vector for key in required_keys):
+                                missing_keys = [key for key in required_keys if key not in vector]
+                                validation_report["pinecone_validation"]["errors"].append(
+                                    f"Index {current_index_name}: vector {i} missing keys: {missing_keys}"
+                                )
+                            elif not str(vector.get("text", "")).strip():
+                                validation_report["pinecone_validation"]["errors"].append(
+                                    f"Index {current_index_name}: vector {i} has empty text content"
+                                )
+                        if vectors and all(
+                            isinstance(v, dict)
+                            and all(k in v for k in required_keys)
+                            and str(v.get("text", "")).strip()
+                            for v in vectors[:5]
+                        ):
+                            any_valid = True
+                    if any_valid and not validation_report["pinecone_validation"]["errors"]:
+                        validation_report["pinecone_validation"]["valid"] = True
+                        validation_report["recommendations"].append("Vector data is valid for loading")
+            # Caso 2: índice puntual + lista de vectores
+            elif vector_data is not None and index_name:
                 if not isinstance(vector_data, list):
                     validation_report["pinecone_validation"]["errors"].append("Vector data must be a list")
                 elif len(vector_data) == 0:
                     validation_report["pinecone_validation"]["errors"].append("Vector data list is empty")
                 else:
-                    # Verificar estructura de vectores
-                    required_keys = ["text", "id", "metadata"]
-                    for i, vector in enumerate(vector_data[:5]):  # Validar primeros 5
+                    for i, vector in enumerate(vector_data[:5]):
                         if not isinstance(vector, dict):
                             validation_report["pinecone_validation"]["errors"].append(f"Vector {i} is not a dictionary")
                         elif not all(key in vector for key in required_keys):
                             missing_keys = [key for key in required_keys if key not in vector]
                             validation_report["pinecone_validation"]["errors"].append(f"Vector {i} missing keys: {missing_keys}")
-                        elif not vector.get("text", "").strip():
+                        elif not str(vector.get("text", "")).strip():
                             validation_report["pinecone_validation"]["errors"].append(f"Vector {i} has empty text content")
-                    
                     if not validation_report["pinecone_validation"]["errors"]:
                         validation_report["pinecone_validation"]["valid"] = True
-                        validation_report["recommendations"].append(f"Vector data for {index_name} is valid for loading")
-                        
-            except Exception as e:
-                validation_report["pinecone_validation"]["errors"].append(f"Validation error: {str(e)}")
+                        validation_report["recommendations"].append(
+                            f"Vector data for {index_name} is valid for loading"
+                        )
+        except Exception as e:
+            validation_report["pinecone_validation"]["errors"].append(f"Validation error: {str(e)}")
         
         # Recomendaciones generales
         if validation_report["supabase_validation"]["valid"] and validation_report["pinecone_validation"]["valid"]:
@@ -4547,6 +5045,12 @@ class InverbotPipelineDato():
             # Get the crew and execute it
             crew_instance = self.crew()
             result = crew_instance.kickoff()
+            
+            # Post-process: generate structured and vector outputs from real raw extraction
+            try:
+                _generate_structured_and_vectors_from_raw()
+            except Exception as _e:
+                print(f"WARNING: Postprocess generation error: {_e}")
             
             # Pipeline completed successfully
             self.performance_metrics["pipeline_end_time"] = datetime.datetime.now().timestamp()
