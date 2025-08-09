@@ -11,7 +11,12 @@
       "Bash(call venv\\Scripts\\activate.bat)",
       "Bash(.venv/Scripts/activate)",
       "Bash(python:*)",
-      "Bash(ping:*)"
+      "Bash(ping:*)",
+      "WebFetch(domain:www.contrataciones.gov.py)",
+      "WebFetch(*)",
+      "WebFetch(domain:www.bolsadevalores.com.py)",
+      "WebFetch(domain:www.ine.gov.py)",
+      "WebFetch(domain:www.datos.gov.py)"
     ],
     "deny": []
   }

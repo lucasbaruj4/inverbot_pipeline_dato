@@ -1,0 +1,30 @@
+{
+  "file_write_status": {
+    "status": "success",
+    "file_path": "output/try_1/vector_data_output.txt",
+    "total_vectors_written": 6,
+    "indices_written": ["documento_informe_vector"],
+    "file_size_kb": 0.002
+  },
+  "vectorization_statistics": {
+    "total_chunks_created": 6,
+    "pdf_documents_processed": 0,
+    "excel_documents_processed": 0,
+    "duplicates_filtered": 0,
+    "indices_populated": ["documento_informe_vector"]
+  },
+  "index_breakdown": {
+    "documentos-informes-vector": {
+      "vectors_created": 6,
+      "average_chunk_size": 1
+    },
+    "dato-macroeconomico-vector": {
+      "vectors_created": 0,
+      "economic_indicators": 0
+    },
+    "licitacion-contrato-vector": {
+      "vectors_created": 0,
+      "contracts_processed": 0
+    }
+  }
+}

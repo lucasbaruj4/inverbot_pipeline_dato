@@ -82,7 +82,32 @@
         "nombre_tipo_informe": "Informe Anual"
       }
     ],
-    "Periodo_Informe": [],
+    "Periodo_Informe": [
+      {
+        "id_periodo": 1,
+        "nombre_periodo": "Enero-Marzo 2025",
+        "fecha_inicio": "2025-01-01",
+        "fecha_fin": "2025-03-31"
+      },
+      {
+        "id_periodo": 2,
+        "nombre_periodo": "Abril-Junio 2025",
+        "fecha_inicio": "2025-04-01",
+        "fecha_fin": "2025-06-30"
+      },
+      {
+        "id_periodo": 3,
+        "nombre_periodo": "Julio-Septiembre 2025",
+        "fecha_inicio": "2025-07-01",
+        "fecha_fin": "2025-09-30"
+      },
+      {
+        "id_periodo": 4,
+        "nombre_periodo": "Octubre-Diciembre 2025",
+        "fecha_inicio": "2025-10-01",
+        "fecha_fin": "2025-12-31"
+      }
+    ],
     "Unidad_Medida": [
       {
         "id_unidad_medida": 1,
@@ -116,19 +141,7 @@
     ],
     "Informe_General": [],
     "Resumen_Informe_Financiero": [],
-    "Dato_Macroeconomico": [
-      {
-        "id_dato_macro": 1,
-        "id_informe": null,
-        "indicador_nombre": "Volumen Mensual Negociado BVA",
-        "fecha_dato": "2025-08-01",
-        "valor_numerico": 1528393985077,
-        "unidad_medida": 2,
-        "id_frecuencia": 3,
-        "link_fuente_especifico": "https://www.bolsadevalores.com.py/informes-mensuales/",
-        "otras_propiedades_jsonb": "{\"tipo_calculo\": \"mensual\", \"variacion_anterior\": \"-21.95%\"}"
-      }
-    ],
+    "Dato_Macroeconomico": [],
     "Movimiento_Diario_Bolsa": [
       {
         "id_operacion": 1,
@@ -205,7 +218,12 @@
       "Informe Mensual": 2,
       "Informe Anual": 3
     },
-    "periodo": {},
+    "periodo": {
+      "Enero-Marzo 2025": 1,
+      "Abril-Junio 2025": 2,
+      "Julio-Septiembre 2025": 3,
+      "Octubre-Diciembre 2025": 4
+    },
     "unidad_medida": {
       "%": 1,
       "GS": 2,
@@ -218,8 +236,8 @@
     }
   },
   "report": {
-    "total_records": 26,
-    "processed_records": 26,
+    "total_records": 29,
+    "processed_records": 29,
     "relationship_errors": [],
     "created_master_entities": {
       "categoria_emisor": 3,
@@ -227,7 +245,7 @@
       "moneda": 2,
       "frecuencia": 5,
       "tipo_informe": 3,
-      "periodo": 0,
+      "periodo": 4,
       "unidad_medida": 3,
       "instrumento": 3
     },
@@ -264,9 +282,9 @@
       },
       {
         "table": "Periodo_Informe",
-        "total": 0,
-        "processed": 0,
-        "entities_created": 0
+        "total": 4,
+        "processed": 4,
+        "entities_created": 4
       },
       {
         "table": "Unidad_Medida",
@@ -294,8 +312,8 @@
       },
       {
         "table": "Dato_Macroeconomico",
-        "total": 1,
-        "processed": 1,
+        "total": 0,
+        "processed": 0,
         "relationship_errors": []
       },
       {
