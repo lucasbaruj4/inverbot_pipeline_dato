@@ -313,7 +313,7 @@ def _get_crawl_config_for_url(url: str, test_mode: bool = True) -> dict:
             "max_depth": 1 if test_mode else 2,  # Shallower for testing
             "limit": 2 if test_mode else 25,  # Much smaller limit for testing
             "wait_for": 1500 if test_mode else 3000,  # Faster for testing
-            "page_timeout": 12000 if test_mode else 30000,  # Shorter timeout for testing
+            "page_timeout": 12000 if test_mode else 60000,  # Shorter timeout for testing
             "timeout": 45 if test_mode else 300  # Much shorter total timeout
         },
         "ine": {
@@ -329,7 +329,7 @@ def _get_crawl_config_for_url(url: str, test_mode: bool = True) -> dict:
             "max_depth": 1 if test_mode else 2,  # Shallower for testing
             "limit": 2 if test_mode else 30,  # Much smaller limit for testing
             "wait_for": 1500 if test_mode else 3500,  # Faster for testing
-            "page_timeout": 12000 if test_mode else 30000,  # Shorter timeout for testing
+            "page_timeout": 12000 if test_mode else 60000,  # Shorter timeout for testing
             "timeout": 45 if test_mode else 350  # Much shorter total timeout
         },
         "contrataciones": {
@@ -345,7 +345,7 @@ def _get_crawl_config_for_url(url: str, test_mode: bool = True) -> dict:
             "max_depth": 1 if test_mode else 2,  # Shallower for testing
             "limit": 2 if test_mode else 20,  # Much smaller limit for testing
             "wait_for": 1500 if test_mode else 3000,  # Faster for testing
-            "page_timeout": 12000 if test_mode else 30000,  # Shorter timeout for testing
+            "page_timeout": 12000 if test_mode else 60000,  # Shorter timeout for testing
             "timeout": 45 if test_mode else 320  # Much shorter total timeout
         }
     }
@@ -372,7 +372,7 @@ def _get_crawl_config_for_url(url: str, test_mode: bool = True) -> dict:
             "max_depth": 1 if test_mode else 2,  # Shallower for testing
             "limit": 2 if test_mode else 25,  # Much smaller limit for testing
             "wait_for": 1500 if test_mode else 3000,  # Faster for testing
-            "page_timeout": 12000 if test_mode else 30000,  # Shorter timeout for testing
+            "page_timeout": 12000 if test_mode else 60000,  # Shorter timeout for testing
             "timeout": 45 if test_mode else 300  # Much shorter total timeout
         }
 
@@ -915,7 +915,7 @@ def increment_document_counter(doc_type: str, url: str):
 
 
 @CrewBase
-class InverbotPipelineDato:
+class InverbotPipelineDato():
     """InverbotPipelineDato crew for ETL pipeline with vector processing"""
     
     # Configuration attributes
@@ -928,9 +928,9 @@ class InverbotPipelineDato:
         # Set test mode
         self.test_mode = True  # Default to test mode for safety
         
-        # Set model configuration with Gemini-1.5-flash for stability
-        self.model_llm = os.getenv('MODEL', 'gemini/gemini-1.5-flash')
-        self.model_embedder = os.getenv('EMBEDDER', 'models/embedding-001')
+        # Set model configuration from environment variables
+        self.model_llm = os.getenv('MODEL', 'gemini/gemini-2.0-flash')
+        self.model_embedder = os.getenv('EMBEDDER', 'gemini/gemini-embedding-001')
         
         self.performance_metrics = {
             "pipeline_start_time": None,
@@ -1230,7 +1230,7 @@ class InverbotPipelineDato:
                 "removeBase64Images": True,
                 "formats": ["markdown", "json"],
                 "waitFor": 3000,
-                "timeout": 30000
+                "timeout": 60000
             }
             
             # Use native CrewAI crawl tool - simplified call
@@ -1257,8 +1257,8 @@ class InverbotPipelineDato:
                 "onlyMainContent": True,
                 "removeBase64Images": True,
                 "formats": ["markdown", "json"],
-                "waitFor": 5000 if test_mode else 8000,  # Faster for testing
-                "timeout": 30000 if test_mode else 45000  # Conservative for testing
+                "waitFor": 8000 if test_mode else 12000,  # Increased wait time
+                "timeout": 60000 if test_mode else 90000  # Much longer timeout
             }
             
             # Use native CrewAI scrape tool - simplified call
@@ -1289,7 +1289,7 @@ class InverbotPipelineDato:
                 "removeBase64Images": True,
                 "formats": ["markdown", "json"],
                 "waitFor": 4000,  # Wait for forms and dropdowns to load
-                "timeout": 30000
+                "timeout": 60000
             }
             
             # Use native CrewAI crawl tool - simplified call
@@ -1313,8 +1313,8 @@ class InverbotPipelineDato:
                 "onlyMainContent": True,
                 "removeBase64Images": True,
                 "formats": ["markdown", "json"],
-                "waitFor": 3000 if test_mode else 6000,  # Faster for testing
-                "timeout": 30000 if test_mode else 45000  # Conservative for testing
+                "waitFor": 6000 if test_mode else 10000,  # Increased wait time
+                "timeout": 60000 if test_mode else 90000  # Much longer timeout
             }
             
             # Use native CrewAI scrape tool - simplified call
@@ -1350,7 +1350,7 @@ class InverbotPipelineDato:
                 "removeBase64Images": True,
                 "formats": ["markdown", "json"],
                 "waitFor": 4000,  # Wait for data catalogs to load
-                "timeout": 30000
+                "timeout": 60000
             }
             
             # Use native CrewAI crawl tool - simplified call
@@ -1382,7 +1382,7 @@ class InverbotPipelineDato:
                 "removeBase64Images": True,
                 "formats": ["markdown", "json"],
                 "waitFor": 4000,  # Wait for publication lists to load
-                "timeout": 30000
+                "timeout": 60000
             }
             
             # Use native CrewAI crawl tool - simplified call
@@ -1488,16 +1488,18 @@ class InverbotPipelineDato:
                 "removeBase64Images": True,
                 "formats": ["markdown", "json"],
                 "waitFor": 4000,
-                "timeout": 30000
+                "timeout": 60000
             }
             
             # Use native CrewAI crawl tool - simplified call
             result = firecrawl_crawl_native(url, "", {}, test_mode)
-            
-            return str(result) if result else f"No content crawled from DNIT Financial: {url}"
+            content = str(result) if result else ""
+            raw = _build_raw_content(url, content)
+            _append_raw_extraction_output("government_sources", "ine_social_content", raw)
+            return json.dumps(raw)
             
         except Exception as e:
-            return f"Error crawling DNIT Financial: {str(e)}"
+            return f"Error crawling INE Social: {str(e)}"
 
     # ============================================================================================
     # SCRAPER TOOLS - PUBLIC CONTRACTS
@@ -1579,7 +1581,7 @@ class InverbotPipelineDato:
                 "removeBase64Images": True,
                 "formats": ["markdown", "json"],
                 "waitFor": 4000,
-                "timeout": 30000
+                "timeout": 60000
             }
             
             # Use native CrewAI crawl tool - simplified call
@@ -1716,14 +1718,14 @@ class InverbotPipelineDato:
                 "removeBase64Images": True,
                 "formats": ["markdown", "json"],
                 "waitFor": 4000,  # Wait for financial reports to load
-                "timeout": 30000
+                "timeout": 60000
             }
             
             # Use native CrewAI scrape tool - simplified call
             result = firecrawl_scrape_native(url, "", {}, test_mode)
             content = str(result) if result else ""
             raw = _build_raw_content(url, content)
-            _append_raw_extraction_output("contracts_investment_sources", "dnit_financial_content", raw)
+            _append_raw_extraction_output("contracts_investment_sources", "dnit_investment_content", raw)
             return json.dumps(raw)
             
         except Exception as e:
@@ -1797,7 +1799,7 @@ class InverbotPipelineDato:
         """
         
         try:
-            # Configure crawling for INE social publications
+            # Configure crawling for DNIT financial reports
             crawl_options = {
                 "maxDepth": 2,  # Publications page + individual publication pages
                 "limit": 8 if test_mode else 25,
@@ -1809,18 +1811,18 @@ class InverbotPipelineDato:
                 "removeBase64Images": True,
                 "formats": ["markdown", "json"],
                 "waitFor": 4000,
-                "timeout": 30000
+                "timeout": 60000
             }
             
             # Use native CrewAI crawl tool - simplified call
             result = firecrawl_crawl_native(url, "", {}, test_mode)
             content = str(result) if result else ""
             raw = _build_raw_content(url, content)
-            _append_raw_extraction_output("government_sources", "ine_social_content", raw)
+            _append_raw_extraction_output("contracts_investment_sources", "dnit_financial_content", raw)
             return json.dumps(raw)
             
         except Exception as e:
-            return f"Error crawling INE Social: {str(e)}"
+            return f"Error crawling DNIT Financial: {str(e)}"
     
     @tool("Extract Structured Data from Raw Content")
     def extract_structured_data_from_raw(raw_content: dict) -> dict:
@@ -1943,6 +1945,51 @@ class InverbotPipelineDato:
                     "error": str(e)
                 }
             }
+
+    @tool("Process Documents with Enterprise Processor")
+    def process_documents_with_enterprise_processor() -> str:
+        """Run the enterprise processor to handle document extraction and comprehensive processing.
+        
+        This tool triggers the enterprise processor which:
+        1. Reads raw_extraction_output.txt
+        2. Downloads and processes PDFs and Excel files  
+        3. Creates structured data and vector embeddings
+        4. Saves all outputs to files
+        
+        Returns:
+            Status report of the processing operation
+        """
+        try:
+            import sys
+            import os
+            # Add the src directory to path to import enterprise processor
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+            
+            from enterprise_processor import EnterpriseProcessor
+            
+            print("STARTING Enterprise Document Processor...")
+            
+            # Initialize the enterprise processor
+            processor = EnterpriseProcessor()
+            
+            # Run the complete document processing pipeline
+            processor.process_all_documents()
+            
+            return """Enterprise processor completed successfully.
+            
+            The following files have been generated:
+            - structured_data_output.txt: Database-ready structured data
+            - vector_data_output.txt: Vector embeddings and metadata
+            - loading_confirmation.txt: Summary of processing results
+            
+            All PDF and Excel documents from raw extraction have been processed.
+            Data is ready for database loading."""
+            
+        except ImportError as e:
+            return f"Error importing enterprise processor: {str(e)}. Make sure enterprise_processor.py exists."
+            
+        except Exception as e:
+            return f"Error running enterprise processor: {str(e)}. Check logs for details."
 
     def _identify_content_type(self, url: str, content: str) -> str:
         """Identify the type of content based on URL and content patterns."""
@@ -5175,6 +5222,7 @@ class InverbotPipelineDato:
                 self.extract_text_from_pdf,
                 self.extract_text_from_excel,
                 self.extract_structured_data_from_raw,
+                self.process_documents_with_enterprise_processor,
                 self.normalize_data,
                 self.validate_data,
                 self.create_entity_relationships,

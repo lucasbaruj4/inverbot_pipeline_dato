@@ -10,8 +10,10 @@ extract_task:
     - Extract metadata about page structure and navigation elements
     - Let the Processor Agent handle intelligent data structuring
     
-    Tool Usage Requirements - MUST USE ALL 10 TOOLS:
-    You MUST call ALL 10 scraper tools. Do NOT stop after using just a few. Call them in this order:
+    Tool Usage Requirements - MANDATORY: ALL 10 TOOLS MUST BE USED:
+    🚨 CRITICAL: You MUST call ALL 10 scraper tools. This is non-negotiable. Do NOT stop after using just a few tools. 
+    🚨 FAILURE TO USE ALL 10 TOOLS WILL RESULT IN INCOMPLETE DATA.
+    Call them in this order:
     
     1. **BVA Sources** (4 tools) - MUST USE ALL:
        - scrape_bva_emisores: Raw content from company listings and entity pages
@@ -29,7 +31,9 @@ extract_task:
        - scrape_dnit_investment: Raw content from investment information pages
        - scrape_dnit_financial: Raw content from financial regulatory reports
     
-    IMPORTANT: You must call ALL 10 tools, even if some fail or return empty data. Do not stop early!
+    🔥 ABSOLUTELY CRITICAL: You must call ALL 10 tools, even if some fail or return empty data. 
+    🔥 DO NOT STOP EARLY - Continue until all 10 tools have been executed!
+    🔥 The output MUST contain content from all 10 sources, even if some are errors!
     
     Content Capture Strategy:
     - Begin with test_mode=True for validation (limited credit usage)

@@ -5,6 +5,10 @@ extractor:
     Extract comprehensive raw content from web sources for later processing
   backstory: >
     You're an expert in web scraping and content extraction. You focus on gathering complete, unstructured content from websites including all text, links, documents, and metadata. You prioritize comprehensive content capture over data structuring, leaving the intelligent organization to downstream processors.
+  verbose: true
+  memory: true
+  max_iter: 12
+  max_execution_time: 7200
 
 processor:
   role: >
@@ -13,6 +17,10 @@ processor:
     Transform raw content into structured database formats using advanced analysis
   backstory: >
     You're an industry-renowned expert in intelligent data transformation and schema mapping. You take raw, unstructured content and convert it into precisely structured database records. You excel at identifying financial reports, market movements, macroeconomic indicators, and public contracts within raw text, then organizing them according to strict database schemas. You're the heavy-lifting expert who ensures database schema compliance.
+  verbose: true
+  memory: true
+  max_iter: 10
+  max_execution_time: 7200
 
 vector: 
   role: >
@@ -21,6 +29,10 @@ vector:
     Create vector embeddings for semantic search
   backstory: >
     Expert in text chunking and embedding generation. You create vector embeddings for the vector database Pinecone and for semantic search in that database. You have both an LLM and a model that makes embeddings, you know how to use them both to create embeddings properly.
+  verbose: true
+  memory: true
+  max_iter: 6
+  max_execution_time: 3600
 
 loader: 
   role: >
@@ -29,3 +41,7 @@ loader:
     Load structured and vector data into their respective databases
   backstory: >
     Expert in database operations and data persistence. You load structured data into Supabase and vector data into Pinecone.
+  verbose: true
+  memory: true
+  max_iter: 6
+  max_execution_time: 3600

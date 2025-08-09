@@ -1,8 +1,8 @@
 # InverBot Pipeline Performance Report
 
-**Generated**: 2025-08-08T23:14:43.922943
+**Generated**: 2025-08-09T11:27:43.161544
 **Test Mode**: ENABLED
-**Total Pipeline Duration**: 601.39 seconds
+**Total Pipeline Duration**: 306.07 seconds
 
 ## Component Status Overview
 
@@ -25,7 +25,7 @@
 
 ## Errors
 
-- [23:14:43] Pipeline failed: Invalid response from LLM call - None or empty.
+- [11:27:43] Pipeline failed: Task execution failed: Invalid response from LLM call - None or empty.
 
 ## Quick Verification Checklist
 
