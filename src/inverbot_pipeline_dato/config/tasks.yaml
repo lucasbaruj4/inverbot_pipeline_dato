@@ -79,73 +79,49 @@ extract_task:
 
 process_task:
   description: >
-    Process raw extracted content through a comprehensive 6-stage pipeline to create production-ready structured data
-    for all 14 Supabase tables. NEW ARCHITECTURE: First stage intelligently converts raw content to structured format.
+    UPDATED PIPELINE ARCHITECTURE: Process raw extracted content through a streamlined 4-stage pipeline 
+    using new file-based tools to create production-ready structured data for all 14 Supabase tables.
+    
+    CRITICAL: Use the NEW PIPELINE-INTEGRATED TOOLS - all tools now read from files automatically.
     
     Sequential Tool Workflow:
     
-    1. **extract_text_from_pdf** & **extract_text_from_excel** - Document Content Extraction [LIMITED MODE]
-       - IMPORTANT: Document limits are active - Max 3 PDFs and 2 Excel files
-       - First read raw_extraction_output.txt to get PDF and Excel URLs
-       - Process PDFs until limit is reached (max 3)
-       - Process Excel files until limit is reached (max 2)
-       - Tools will automatically skip documents once limits are reached
-       - Skipped documents will be processed later via direct_processor.py
-       - Output: Extracted document text content for structured processing
+    1. **Extract Structured Data from Raw Content** - Intelligent Content Structuring
+       - TOOL: extract_structured_data_from_raw (NEW: reads from raw_extraction_output.txt automatically)
+       - Reads raw content from extractor agent's output file
+       - Intelligently extracts structured data from unstructured text
+       - Processes BVA financial data (bond emissions, company ratings, trading volumes)
+       - Routes processing based on source (BVA, INE, DNIT, contracts, etc.)
+       - Converts raw content into structured format for all 14 database tables
+       - Handles malformed JSON and incomplete data gracefully
+       - Output: Writes structured_data_output.txt with organized data
     
-    2. **extract_structured_data_from_raw** - Intelligent Content Structuring
-       - Input: Raw content from extractor + extracted document text from step 1
-       - Analyze content type based on source URL and content patterns
-       - Intelligently extract structured data from unstructured text
-       - Route processing based on source (BVA, INE, DNIT, contracts, etc.)
-       - Convert raw content into preliminary database record format
-       - Output: Structured data organized by 14 database tables
+    2. **Normalize Data Tool** - Data Cleaning & Standardization
+       - TOOL: normalize_data (NEW: reads from structured_data_output.txt automatically)
+       - Reads structured data from step 1 output file
+       - Cleans HTML artifacts, special characters, encoding issues
+       - Standardizes date formats (YYYY-MM-DD), number formats (decimal)
+       - Normalizes emisor names to lowercase with dashes
+       - Handles missing values and data type inconsistencies
+       - Output: Writes normalized_data_output.txt with cleaned data
     
-    3. **normalize_data** - Data Cleaning & Standardization
-       - Input: Structured data from step 2
-       - Clean HTML artifacts, special characters, encoding issues
-       - Standardize date formats (YYYY-MM-DD), number formats (decimal)
-       - Convert string numbers to proper numeric types
-       - Handle missing values and data type inconsistencies
-       - Output: Clean, normalized data dictionary
+    3. **Validate Data Tool** - Schema Validation  
+       - TOOL: validate_data (NEW: reads from normalized_data_output.txt automatically)
+       - Reads normalized data from step 2 output file
+       - Validates against all 14 Supabase table schemas (UPDATED schemas)
+       - Checks data types, field lengths, required constraints
+       - Validates foreign key references and relationships
+       - Separates valid data from invalid entries with error reporting
+       - Output: Writes validated_data_output.txt with validation results
     
-    4. **validate_data** - Schema Validation
-       - Input: Normalized data from step 3
-       - Validate against all 14 Supabase table schemas
-       - Check data types, field lengths, required constraints
-       - Validate foreign key references and relationships
-       - Separate valid data from invalid entries with error reporting
-       - Output: Validated data + validation error report
-    
-    5. **create_entity_relationships** - Relationship Building
-       - Input: Validated data from step 4
-       - Resolve entity names to proper IDs (emisor names → id_emisor)
-       - Create master entities first (Categoria_Emisor, Moneda, etc.)
-       - Establish foreign key relationships across all tables
-       - Handle missing references with appropriate defaults
-       - Output: Data with complete entity relationships
-    
-    6. **structure_extracted_data** - Final Organization
-       - Input: Data with relationships from step 5
-       - Organize data by target Supabase tables
-       - Apply loading priorities (master tables first)
-       - Create optimized batches for bulk loading
-       - Add loading metadata and recommendations
-       - Output: Production-ready structured data
-    
-    7. **filter_duplicate_data** - Duplicate Prevention
-       - Input: Structured data from step 6
-       - Check existing Supabase data to prevent duplicates
-       - Use table-specific unique field combinations
-       - Filter out existing records, keep only new data
-       - Output: Final deduplicated data ready for loading
-    
-    8. **write_structured_data_to_file** - File Persistence [CRITICAL - MUST BE LAST]
-       - Input: Final structured data from step 7
-       - Write complete structured data to output/try_1/structured_data_output.txt
-       - Handles large datasets that exceed LLM response limits
-       - Ensures data persistence for downstream agents
-       - Output: Success status with file path and statistics
+    4. **Create Entity Relationships Tool** - Relationship Building
+       - TOOL: create_entity_relationships (NEW: reads from validated_data_output.txt automatically)
+       - Reads validated data from step 3 output file
+       - Resolves entity names to proper IDs (emisor names → id_emisor)
+       - Creates master entities first (Categoria_Emisor, Moneda, etc.)
+       - Establishes foreign key relationships across all tables
+       - Handles missing references with appropriate defaults
+       - Output: Writes relationships_data_output.txt with complete entity relationships
     
     Quality Checkpoints:
     - Validate data integrity at each stage
@@ -190,45 +166,32 @@ process_task:
 
 vectorize_task: 
   description: >
-    Transform documents and extracted content into high-quality vector embeddings for semantic search across 3 Pinecone indices.
-    Process both PDF documents and structured content through a comprehensive 4-stage vectorization pipeline.
+    UPDATED PIPELINE ARCHITECTURE: Transform structured financial data into high-quality vector embeddings 
+    for semantic search across 3 Pinecone indices using new pipeline-integrated tools.
+    
+    CRITICAL: Use the NEW PIPELINE-INTEGRATED TOOL - automatically reads from structured data files.
     
     Sequential Tool Workflow:
     
-    1. **chunk_document** - Intelligent Text Chunking
-       - Input: Extracted document text and structured data from 'structured_data_output.txt'
-       - Chunk size: 1200 tokens (optimized for Gemini embeddings)
-       - Overlap: 200 tokens to preserve semantic continuity
-       - Use tiktoken for accurate token counting with fallback to character-based chunking
-       - Preserve semantic boundaries at sentence/paragraph breaks
-       - Maintain context across chunks with proper overlap management
-       - Output: List of text chunks with position metadata
+    1. **Process Structured Data for Vectorization** - Complete Vector Generation Pipeline
+       - TOOL: process_structured_data_for_vectorization (NEW: reads from relationships_data_output.txt automatically)
+       - Reads structured data with relationships from processor agent output
+       - Creates meaningful vector content for all 3 Pinecone indices:
+         * documento_informe_vector: Bond operations, issuer information, financial movements
+         * dato_macroeconomico_vector: Economic indicators with context (trading volumes, economic metrics)
+         * licitacion_contrato_vector: Contract and tender information
+       - Generates descriptive text from structured financial data
+       - Creates proper metadata linking to Supabase records
+       - Assigns unique UUIDs for each vector
+       - Handles all data transformation internally
+       - Output: Writes vector_data_output.txt with complete vector-ready data
     
-    2. **prepare_document_metadata** - Multi-Index Metadata Preparation
-       - Input: Chunks from step 1 + structured data relationships
-       - Prepare metadata for 3 Pinecone indices:
-         * documentos-informes-vector: Full document embeddings
-         * dato-macroeconomico-vector: Economic indicator context
-         * licitacion-contrato-vector: Contract and tender details
-       - Generate unique UUID-based vector IDs
-       - Create rich metadata linking to Supabase records
-       - Include processing timestamps and content classification
-       - Output: Vector-ready data with index-specific metadata
-    
-    3. **filter_duplicate_vectors** - Vector Deduplication
-       - Input: Prepared vector data from step 2
-       - Check existing Pinecone indices for duplicate content
-       - Use unique field combinations per index for deduplication
-       - Filter out existing vectors, keep only new content
-       - Report deduplication statistics
-       - Output: Final deduplicated vector data ready for embedding
-    
-    4. **write_vector_data_to_file** - File Persistence [CRITICAL - MUST BE LAST]
-       - Input: Final vector data from step 3
-       - Write complete vector data to output/try_1/vector_data_output.txt
+    2. **Write Vector Data to File** - File Persistence [AUTOMATIC]
+       - TOOL: write_vector_data_to_file (if needed for additional processing)
        - Handles large vector datasets that exceed LLM response limits
        - Ensures data persistence for downstream loading agent
-       - Output: Success status with file path and statistics
+       - Already integrated into process_structured_data_for_vectorization
+       - Output: Confirms vector data file creation
     
     Index-Specific Processing:
     - **documentos-informes-vector**: Complete document content with structured data references
@@ -286,52 +249,44 @@ vectorize_task:
 
 load_task:
   description: >
-    Execute production database loading operations for both structured data (Supabase) and vector data (Pinecone).
-    Load processed data through a comprehensive 4-stage pipeline with validation, monitoring, and status reporting.
+    UPDATED PIPELINE ARCHITECTURE: Execute database loading operations for both structured data (Supabase) 
+    and vector data (Pinecone) using new pipeline-integrated tools that automatically read from files.
+    
+    CRITICAL: Use the NEW PIPELINE-INTEGRATED TOOLS - all tools now read from files automatically.
     
     Sequential Tool Workflow:
     
-    1. **validate_data_before_loading** - Pre-Loading Validation
-       - Input: Structured data from 'structured_data_output.txt' + vector data from 'vector_data_output.txt'
-       - Validate data integrity before database operations
-       - Check Supabase table schemas and constraints
-       - Validate Pinecone vector dimensions and metadata formats
-       - Verify foreign key relationships and data consistency
-       - Confirm all required fields are populated
-       - Output: Validation report + loading-ready data
+    1. **Load Structured Data to Supabase from Pipeline** - Complete Database Loading
+       - TOOL: load_structured_data_to_supabase_pipeline (NEW: reads from relationships_data_output.txt automatically)
+       - Reads structured data with relationships from processor agent output
+       - Loads data to all 14 Supabase tables with proper sequence:
+         * Master tables: Categoria_Emisor, Moneda, Frecuencia, Unidad_Medida, etc.
+         * Entity tables: Emisores, Instrumento, Tipo_Informe, etc.
+         * Transaction tables: Movimiento_Diario_Bolsa, Dato_Macroeconomico, etc.
+       - Handles foreign key constraints and relationships automatically
+       - Uses corrected schema definitions (nombre_instrumento not simbolo_instrumento)
+       - Generates deterministic IDs from unique field combinations
+       - In TEST_MODE: Saves data as JSON files instead of database loading
+       - Output: Writes supabase_loading_report.json with comprehensive results
     
-    2. **load_data_to_supabase** - Structured Data Loading
-       - Input: Validated structured data from step 1
-       - Load data to all 14 Supabase tables in proper sequence:
-         * Master tables first: Categoria_Emisor, Moneda, Frecuencia, etc.
-         * Main entities: Emisores, Instrumento, Tipo_Informe, etc.  
-         * Transaction data: Informe_General, Resumen_Informe_Financiero
-         * Operational data: Movimiento_Diario_Bolsa, Dato_Macroeconomico, Licitacion_Contrato
-       - Use optimized batch sizes (50 records per batch)
-       - Handle foreign key constraints and relationships
-       - Report loading statistics and any errors
-       - Output: Supabase loading results + record counts
+    2. **Load Vectors to Pinecone from Pipeline** - Complete Vector Loading
+       - TOOL: load_vectors_to_pinecone_pipeline (NEW: reads from vector_data_output.txt automatically)
+       - Reads vector data from vectorization agent output
+       - Loads vectors to 3 Pinecone indices:
+         * documento_informe_vector: Financial operations and issuer data
+         * dato_macroeconomico_vector: Economic indicators and trading volumes
+         * licitacion_contrato_vector: Contract and tender information
+       - In TEST_MODE: Generates mock 768-dimensional embeddings deterministically
+       - Creates proper metadata for semantic search
+       - Handles batch processing automatically
+       - Output: Writes pinecone_loading_report.json with comprehensive results
     
-    3. **load_vectors_to_pinecone** - Vector Data Loading
-       - Input: Validated vector data from step 1
-       - Generate Gemini embeddings for all text chunks
-       - Load vectors to 3 Pinecone indices:
-         * documentos-informes-vector: Document content embeddings
-         * dato-macroeconomico-vector: Economic indicator context  
-         * licitacion-contrato-vector: Contract and tender details
-       - Use optimized batch sizes (20 vectors per batch)
-       - Include rich metadata for semantic search
-       - Handle embedding generation errors gracefully
-       - Output: Pinecone loading results + vector counts
-    
-    4. **check_loading_status** - Comprehensive Status Verification
-       - Input: Loading results from steps 2 and 3
-       - Verify data integrity in both databases
-       - Check record counts match expected numbers
-       - Validate foreign key relationships in Supabase  
-       - Confirm vector embeddings in Pinecone indices
-       - Generate comprehensive loading report
-       - Output: Complete ETL pipeline status report
+    3. **Check Loading Status** - Status Verification (if needed)
+       - TOOL: check_loading_status (for additional verification if needed)
+       - Verifies loading results from both tools
+       - Checks file outputs and data integrity
+       - Generates comprehensive ETL pipeline status report
+       - Output: Complete pipeline status verification
     
     Database Operations:
     - **Supabase**: 14 tables with proper constraint handling

@@ -1,0 +1,58 @@
+{
+  "table_name": "Movimiento_Diario_Bolsa",
+  "timestamp": "2025-08-09T12:14:55.554406",
+  "records_count": 3,
+  "unique_fields": [
+    "fecha_operacion",
+    "id_instrumento",
+    "id_emisor"
+  ],
+  "primary_key": "id_operacion",
+  "data": [
+    {
+      "id_operacion": 1,
+      "fecha_operacion": "2025-08-05",
+      "cantidad_operacion": 340000.0,
+      "id_instrumento": 1,
+      "id_emisor": 1,
+      "fecha_vencimiento_instrumento": "2030-08-09",
+      "id_moneda": 1,
+      "precio_operacion": 100.0,
+      "precio_anterior_instrumento": 100.0,
+      "tasa_interes_nominal": 7.45,
+      "tipo_cambio": 1.0,
+      "variacion_operacion": 0.0,
+      "volumen_gs_operacion": 34000000000
+    },
+    {
+      "id_operacion": 2,
+      "fecha_operacion": "2025-08-08",
+      "cantidad_operacion": 950000.0,
+      "id_instrumento": 1,
+      "id_emisor": 2,
+      "fecha_vencimiento_instrumento": "2032-08-04",
+      "id_moneda": 1,
+      "precio_operacion": 100.0,
+      "precio_anterior_instrumento": 100.0,
+      "tasa_interes_nominal": 9.0,
+      "tipo_cambio": 1.0,
+      "variacion_operacion": 0.0,
+      "volumen_gs_operacion": 95000000000
+    },
+    {
+      "id_operacion": 3,
+      "fecha_operacion": "2025-08-11",
+      "cantidad_operacion": 50000.0,
+      "id_instrumento": 1,
+      "id_emisor": 3,
+      "fecha_vencimiento_instrumento": "2031-08-11",
+      "id_moneda": 1,
+      "precio_operacion": 100.0,
+      "precio_anterior_instrumento": 100.0,
+      "tasa_interes_nominal": 14.0,
+      "tipo_cambio": 1.0,
+      "variacion_operacion": 0.0,
+      "volumen_gs_operacion": 5000000000
+    }
+  ]
+}

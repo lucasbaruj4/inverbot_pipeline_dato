@@ -1,0 +1,23 @@
+{
+  "table_name": "Dato_Macroeconomico",
+  "timestamp": "2025-08-09T12:14:55.553905",
+  "records_count": 1,
+  "unique_fields": [
+    "indicador_nombre",
+    "fecha_dato"
+  ],
+  "primary_key": "id_dato_macro",
+  "data": [
+    {
+      "id_dato_macro": 1,
+      "id_informe": null,
+      "indicador_nombre": "Volumen Mensual Negociado BVA",
+      "fecha_dato": "2025-08-01",
+      "valor_numerico": 1528393985077,
+      "unidad_medida": 2,
+      "id_frecuencia": 3,
+      "link_fuente_especifico": "https://www.bolsadevalores.com.py/informes-mensuales/",
+      "otras_propiedades_jsonb": "{\"tipo_calculo\": \"mensual\", \"variacion_anterior\": \"-21.95%\"}"
+    }
+  ]
+}

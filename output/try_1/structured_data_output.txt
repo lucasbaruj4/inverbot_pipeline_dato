@@ -1,0 +1,27 @@
+```json
+{
+  "file_write_status": {
+    "status": "success",
+    "file_path": "output/try_1/structured_data_output.txt",
+    "total_records_written": 0,
+    "tables_written": [],
+    "file_size_kb": 4.276
+  },
+  "processing_summary": {
+    "tables_populated": ["Categoria_Emisor", "Moneda", "Frecuencia", "Tipo_Informe", "Unidad_Medida", "Instrumento", "Emisores", "Dato_Macroeconomico", "Movimiento_Diario_Bolsa"],
+    "total_records_processed": 26,
+    "documents_extracted": 0,
+    "relationships_created": 26,
+    "duplicates_filtered": 0,
+    "validation_errors": 0,
+    "data_quality_score": 1.0
+  },
+  "key_statistics": {
+    "emisores_created": 3,
+    "informes_processed": 0,
+    "macroeconomic_data_points": 1,
+    "contracts_identified": 0,
+    "daily_movements": 3
+  }
+}
+```

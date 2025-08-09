@@ -1,0 +1,29 @@
+{
+  "table_name": "Emisores",
+  "timestamp": "2025-08-09T12:14:55.548907",
+  "records_count": 3,
+  "unique_fields": [
+    "nombre_emisor"
+  ],
+  "primary_key": "id_emisor",
+  "data": [
+    {
+      "id_emisor": 1,
+      "nombre_emisor": "corporación-andina-de-fomento",
+      "id_categoria_emisor": 1,
+      "calificacion_bva": "N/A"
+    },
+    {
+      "id_emisor": 2,
+      "nombre_emisor": "banco-basa-sa",
+      "id_categoria_emisor": 1,
+      "calificacion_bva": "N/A"
+    },
+    {
+      "id_emisor": 3,
+      "nombre_emisor": "campestre-sae",
+      "id_categoria_emisor": 1,
+      "calificacion_bva": "N/A"
+    }
+  ]
+}

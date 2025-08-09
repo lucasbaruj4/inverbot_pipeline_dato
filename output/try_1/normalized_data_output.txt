@@ -1,0 +1,266 @@
+{
+  "normalized": {
+    "Categoria_Emisor": [
+      {
+        "id_categoria_emisor": 1,
+        "categoria_emisor": "Rubro financiero"
+      },
+      {
+        "id_categoria_emisor": 2,
+        "categoria_emisor": "Sector agropecuario"
+      },
+      {
+        "id_categoria_emisor": 3,
+        "categoria_emisor": "Corporación de fomento"
+      }
+    ],
+    "Emisores": [
+      {
+        "id_emisor": 1,
+        "nombre_emisor": "corporación-andina-de-fomento",
+        "id_categoria_emisor": 1,
+        "calificacion_bva": "N/A"
+      },
+      {
+        "id_emisor": 2,
+        "nombre_emisor": "banco-basa-sa",
+        "id_categoria_emisor": 1,
+        "calificacion_bva": "N/A"
+      },
+      {
+        "id_emisor": 3,
+        "nombre_emisor": "campestre-sae",
+        "id_categoria_emisor": 1,
+        "calificacion_bva": "N/A"
+      }
+    ],
+    "Moneda": [
+      {
+        "id_moneda": 1,
+        "codigo_moneda": "PYG",
+        "nombre_moneda": "Guarani"
+      },
+      {
+        "id_moneda": 2,
+        "codigo_moneda": "USD",
+        "nombre_moneda": "Dólar"
+      }
+    ],
+    "Frecuencia": [
+      {
+        "id_frecuencia": 1,
+        "nombre_frecuencia": "Anual"
+      },
+      {
+        "id_frecuencia": 2,
+        "nombre_frecuencia": "Trimestral"
+      },
+      {
+        "id_frecuencia": 3,
+        "nombre_frecuencia": "Mensual"
+      },
+      {
+        "id_frecuencia": 4,
+        "nombre_frecuencia": "Diario"
+      },
+      {
+        "id_frecuencia": 13,
+        "nombre_frecuencia": "Semestral"
+      }
+    ],
+    "Tipo_Informe": [
+      {
+        "id_tipo_informe": 1,
+        "nombre_tipo_informe": "Informe Financiero"
+      },
+      {
+        "id_tipo_informe": 2,
+        "nombre_tipo_informe": "Informe Mensual"
+      },
+      {
+        "id_tipo_informe": 3,
+        "nombre_tipo_informe": "Informe Anual"
+      }
+    ],
+    "Periodo_Informe": [],
+    "Unidad_Medida": [
+      {
+        "id_unidad_medida": 1,
+        "simbolo": "%",
+        "nombre_unidad": "Porcentaje"
+      },
+      {
+        "id_unidad_medida": 2,
+        "simbolo": "GS",
+        "nombre_unidad": "Guaraníes"
+      },
+      {
+        "id_unidad_medida": 3,
+        "simbolo": "USD",
+        "nombre_unidad": "Dólares"
+      }
+    ],
+    "Instrumento": [
+      {
+        "id_instrumento": 1,
+        "nombre_instrumento": "Bono"
+      },
+      {
+        "id_instrumento": 2,
+        "nombre_instrumento": "Acción"
+      },
+      {
+        "id_instrumento": 3,
+        "nombre_instrumento": "Fondo de Inversión"
+      }
+    ],
+    "Informe_General": [],
+    "Resumen_Informe_Financiero": [],
+    "Dato_Macroeconomico": [
+      {
+        "id_dato_macro": 1,
+        "id_informe": null,
+        "indicador_nombre": "Volumen Mensual Negociado BVA",
+        "fecha_dato": "2025-08-01",
+        "valor_numerico": 1528393985077,
+        "unidad_medida": 2,
+        "id_frecuencia": 3,
+        "link_fuente_especifico": "https://www.bolsadevalores.com.py/informes-mensuales/",
+        "otras_propiedades_jsonb": "{\"tipo_calculo\": \"mensual\", \"variacion_anterior\": \"-21.95%\"}"
+      }
+    ],
+    "Movimiento_Diario_Bolsa": [
+      {
+        "id_operacion": 1,
+        "fecha_operacion": "2025-08-05",
+        "cantidad_operacion": 340000.0,
+        "id_instrumento": 1,
+        "id_emisor": 1,
+        "fecha_vencimiento_instrumento": "2030-08-09",
+        "id_moneda": 1,
+        "precio_operacion": 100.0,
+        "precio_anterior_instrumento": 100.0,
+        "tasa_interes_nominal": 7.45,
+        "tipo_cambio": 1.0,
+        "variacion_operacion": 0.0,
+        "volumen_gs_operacion": 34000000000
+      },
+      {
+        "id_operacion": 2,
+        "fecha_operacion": "2025-08-08",
+        "cantidad_operacion": 950000.0,
+        "id_instrumento": 1,
+        "id_emisor": 2,
+        "fecha_vencimiento_instrumento": "2032-08-04",
+        "id_moneda": 1,
+        "precio_operacion": 100.0,
+        "precio_anterior_instrumento": 100.0,
+        "tasa_interes_nominal": 9.0,
+        "tipo_cambio": 1.0,
+        "variacion_operacion": 0.0,
+        "volumen_gs_operacion": 95000000000
+      },
+      {
+        "id_operacion": 3,
+        "fecha_operacion": "2025-08-11",
+        "cantidad_operacion": 50000.0,
+        "id_instrumento": 1,
+        "id_emisor": 3,
+        "fecha_vencimiento_instrumento": "2031-08-11",
+        "id_moneda": 1,
+        "precio_operacion": 100.0,
+        "precio_anterior_instrumento": 100.0,
+        "tasa_interes_nominal": 14.0,
+        "tipo_cambio": 1.0,
+        "variacion_operacion": 0.0,
+        "volumen_gs_operacion": 5000000000
+      }
+    ],
+    "Licitacion_Contrato": []
+  },
+  "report": {
+    "total_records": 26,
+    "normalized_records": 26,
+    "errors": [],
+    "tables_processed": [
+      {
+        "table": "Categoria_Emisor",
+        "total": 3,
+        "normalized": 3,
+        "errors": 0
+      },
+      {
+        "table": "Emisores",
+        "total": 3,
+        "normalized": 3,
+        "errors": 0
+      },
+      {
+        "table": "Moneda",
+        "total": 2,
+        "normalized": 2,
+        "errors": 0
+      },
+      {
+        "table": "Frecuencia",
+        "total": 5,
+        "normalized": 5,
+        "errors": 0
+      },
+      {
+        "table": "Tipo_Informe",
+        "total": 3,
+        "normalized": 3,
+        "errors": 0
+      },
+      {
+        "table": "Periodo_Informe",
+        "total": 0,
+        "normalized": 0,
+        "errors": 0
+      },
+      {
+        "table": "Unidad_Medida",
+        "total": 3,
+        "normalized": 3,
+        "errors": 0
+      },
+      {
+        "table": "Instrumento",
+        "total": 3,
+        "normalized": 3,
+        "errors": 0
+      },
+      {
+        "table": "Informe_General",
+        "total": 0,
+        "normalized": 0,
+        "errors": 0
+      },
+      {
+        "table": "Resumen_Informe_Financiero",
+        "total": 0,
+        "normalized": 0,
+        "errors": 0
+      },
+      {
+        "table": "Dato_Macroeconomico",
+        "total": 1,
+        "normalized": 1,
+        "errors": 0
+      },
+      {
+        "table": "Movimiento_Diario_Bolsa",
+        "total": 3,
+        "normalized": 3,
+        "errors": 0
+      },
+      {
+        "table": "Licitacion_Contrato",
+        "total": 0,
+        "normalized": 0,
+        "errors": 0
+      }
+    ]
+  }
+}
