@@ -914,11 +914,19 @@ def increment_document_counter(doc_type: str, url: str):
         print(f"[Document Counter] Processed Excel {DOCUMENT_COUNTERS['excel']}/{DOCUMENT_LIMITS['excel']}: {url}")
 
 
-class InverbotPipelineDato(CrewBase):
+@CrewBase
+class InverbotPipelineDato:
     """InverbotPipelineDato crew for ETL pipeline with vector processing"""
+    
+    # Configuration attributes
+    agents_config = 'config/agents.yaml'
+    tasks_config = 'config/tasks.yaml'
     
     def __init__(self):
         super().__init__()
+        
+        # Set test mode
+        self.test_mode = True  # Default to test mode for safety
         
         # Set model configuration with Gemini-1.5-flash for stability
         self.model_llm = os.getenv('MODEL', 'gemini/gemini-1.5-flash')

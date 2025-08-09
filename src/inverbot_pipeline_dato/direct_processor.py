@@ -100,17 +100,17 @@ class DirectDocumentProcessor:
                 self.stats["pdfs_processed"] += 1
                 self.processed_documents["processed_pdfs"].append(pdf_url)
                 self.save_checkpoint()
-                print(f"  ✓ Extracted {len(full_text)} characters from {max_pages} pages")
+                print(f"  Success: Extracted {len(full_text)} characters from {max_pages} pages")
                 return full_text
             else:
-                print(f"  × No text extracted")
+                print(f"  Error: No text extracted")
                 self.stats["pdfs_failed"] += 1
                 
         except requests.RequestException as e:
-            print(f"  × Download failed: {e}")
+            print(f"  Error: Download failed: {e}")
             self.stats["pdfs_failed"] += 1
         except Exception as e:
-            print(f"  × Processing failed: {e}")
+            print(f"  Error: Processing failed: {e}")
             self.stats["pdfs_failed"] += 1
         
         return None
@@ -163,17 +163,17 @@ class DirectDocumentProcessor:
                 self.stats["excels_processed"] += 1
                 self.processed_documents["processed_excels"].append(excel_url)
                 self.save_checkpoint()
-                print(f"  ✓ Extracted {len(full_text)} characters from {len(text_parts)} sheets")
+                print(f"  Success: Extracted {len(full_text)} characters from {len(text_parts)} sheets")
                 return full_text
             else:
-                print(f"  × No data extracted")
+                print(f"  Error: No data extracted")
                 self.stats["excels_failed"] += 1
                 
         except requests.RequestException as e:
-            print(f"  × Download failed: {e}")
+            print(f"  Error: Download failed: {e}")
             self.stats["excels_failed"] += 1
         except Exception as e:
-            print(f"  × Processing failed: {e}")
+            print(f"  Error: Processing failed: {e}")
             self.stats["excels_failed"] += 1
         
         return None
