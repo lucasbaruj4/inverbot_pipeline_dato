@@ -1,6 +1,6 @@
 {
   "table_name": "Instrumento",
-  "timestamp": "2025-08-09T12:14:55.553407",
+  "timestamp": "2025-08-09T12:39:20.039267",
   "records_count": 3,
   "unique_fields": [
     "nombre_instrumento"

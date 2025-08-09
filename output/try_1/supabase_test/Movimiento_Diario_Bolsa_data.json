@@ -1,6 +1,6 @@
 {
   "table_name": "Movimiento_Diario_Bolsa",
-  "timestamp": "2025-08-09T12:14:55.554406",
+  "timestamp": "2025-08-09T12:39:20.039767",
   "records_count": 3,
   "unique_fields": [
     "fecha_operacion",

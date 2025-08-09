@@ -1,7 +1,7 @@
 {
   "table_name": "Dato_Macroeconomico",
-  "timestamp": "2025-08-09T12:14:55.553905",
-  "records_count": 1,
+  "timestamp": "2025-08-09T12:39:20.039267",
+  "records_count": 2,
   "unique_fields": [
     "indicador_nombre",
     "fecha_dato"
@@ -18,6 +18,17 @@
       "id_frecuencia": 3,
       "link_fuente_especifico": "https://www.bolsadevalores.com.py/informes-mensuales/",
       "otras_propiedades_jsonb": "{\"tipo_calculo\": \"mensual\", \"variacion_anterior\": \"-21.95%\"}"
+    },
+    {
+      "id_dato_macro": 2,
+      "id_informe": null,
+      "indicador_nombre": "Porcentaje de Pobreza",
+      "fecha_dato": "2024-01-10",
+      "valor_numerico": 24.2,
+      "unidad_medida": 1,
+      "id_frecuencia": 1,
+      "link_fuente_especifico": "https://www.datos.gov.py/search/field_topic/pobreza-83",
+      "otras_propiedades_jsonb": "{\"fuente\": \"INE\", \"metodologia\": \"NBI\"}"
     }
   ]
 }

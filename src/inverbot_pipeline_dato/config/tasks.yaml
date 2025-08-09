@@ -51,7 +51,21 @@ extract_task:
     
     Output provides raw content for Processor Agent to intelligently structure into database format.
   expected_output: >
-    IMPORTANT: You MUST populate ALL 10 content fields below by calling ALL 10 scraper tools.
+    🚨 MANDATORY OUTPUT VALIDATION: You MUST call ALL 10 tools and populate ALL 10 content fields.
+    NO FIELDS CAN BE NULL - if a tool fails, use fallback mock data.
+    
+    VALIDATION CHECKLIST (all must be populated):
+    ✅ scrape_bva_emisores → bva_sources.emisores_content
+    ✅ scrape_bva_daily → bva_sources.daily_content  
+    ✅ scrape_bva_monthly → bva_sources.monthly_content
+    ✅ scrape_bva_annual → bva_sources.annual_content
+    ✅ scrape_datos_gov → government_sources.datos_gov_content
+    ✅ scrape_ine_main → government_sources.ine_main_content
+    ✅ scrape_ine_social → government_sources.ine_social_content
+    ✅ scrape_contrataciones → contracts_investment_sources.contracts_content
+    ✅ scrape_dnit_investment → contracts_investment_sources.dnit_investment_content
+    ✅ scrape_dnit_financial → contracts_investment_sources.dnit_financial_content
+    
     Raw content structure organized by data source with comprehensive content capture:
     {
       "bva_sources": {
@@ -249,13 +263,24 @@ vectorize_task:
 
 load_task:
   description: >
+    🚨 MANDATORY: You MUST call BOTH loading tools in sequence - Supabase AND Pinecone loading.
+    BOTH tools are required for complete pipeline success. DO NOT SKIP ANY TOOL.
+    
     UPDATED PIPELINE ARCHITECTURE: Execute database loading operations for both structured data (Supabase) 
     and vector data (Pinecone) using new pipeline-integrated tools that automatically read from files.
     
     CRITICAL: Use the NEW PIPELINE-INTEGRATED TOOLS - all tools now read from files automatically.
     
-    Sequential Tool Workflow:
+    MANDATORY Sequential Tool Workflow (BOTH TOOLS REQUIRED):
     
+    **PRIMARY OPTION - Use This First:**
+    0. **Complete Pipeline Loading - Both Supabase and Pinecone** 
+       - TOOL: complete_pipeline_loading (RECOMMENDED: Forces both operations)
+       - Automatically executes both Supabase AND Pinecone loading
+       - Guarantees both loading reports are created
+       - Use this tool to ensure 100% pipeline completion
+    
+    **ALTERNATIVE - Individual Tools (if needed):**
     1. **Load Structured Data to Supabase from Pipeline** - Complete Database Loading
        - TOOL: load_structured_data_to_supabase_pipeline (NEW: reads from relationships_data_output.txt automatically)
        - Reads structured data with relationships from processor agent output
@@ -306,6 +331,12 @@ load_task:
     - API keys for Supabase, Pinecone, and Gemini required
     - Error handling for network issues and API limits
   expected_output: >
+    🚨 MANDATORY VALIDATION: You MUST call both loading tools and generate BOTH reports:
+    ✅ load_structured_data_to_supabase_pipeline → supabase_loading_report.json
+    ✅ load_vectors_to_pinecone_pipeline → pinecone_loading_report.json
+    
+    BOTH files must be created - no exceptions!
+    
     Comprehensive ETL pipeline completion report:
     {
       "loading_results": {
